@@ -1,7 +1,7 @@
 import random
 from plainSprites import plainSprite
 from droppedItem import droppedItem
-from variables import display
+from variables import width, height
 from foe import foe
 
 
@@ -23,7 +23,17 @@ class room:
             self.background = 'earlyMorningOvergroundDesertBackground.bmp'
 
         elif biome == 'ship':
-            self.yBoundaries = [74 * display.get_height() / 900, display.get_height()]
+            self.yBoundaries = 84 * height / 900
 
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
+
+        if self.biome == 'ship':
+            self.background = 'shipBackgroundWithDoor.bmp'
+
+            for foe in self.foes:
+                foe.yBoundary = (165 - foe.place.height) * height / 900
+
+            for wave in self.waves:
+                for foe in wave:
+                    foe.yBoundary = (165 - foe.place.height) * height / 900
