@@ -1,10 +1,11 @@
 from room import room
 from plainSprites import plainSprite
-from variables import display
+from variables import height, width, yBoundaryShip
 from foe import foe
 from droppedItem import droppedItem
 from item import item
 from damagingTrap import damagingTrap
+from definitions import saveWithPickle, loadWithPickle
 
 import random
 
@@ -15,50 +16,95 @@ class world:
         self.potentialCoordinates = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]
         shipRooms = [room([0, 0, 10], 'ship', background='shipBackgroundWithDoor.bmp'),
 
-                     room([0, 1, 10], 'ship', background='shipBackgroundWithDoor.bmp', droppedItems=[
-                         droppedItem(display.get_width() / 2, display.get_height() / 2, 'pistolInInventory.png',
+                     room([0, 1, 10], 'ship', droppedItems=[
+                         droppedItem(width / 2, height / 2, 'pistolInInventory.png',
                                      item('nanotechRevolver', 'pistolInInventory.png'))
-                     ], damagingTraps=[damagingTrap('fireTrap2.png', 26, display.get_width() / 20
-                                                    * (1 + 2 * i), display.get_height() * (2 / 3 - i * 13 / 900)) for
+                     ], damagingTraps=[damagingTrap('fireTrap2.png', 26, width / 20
+                                                    * (1 + 2 * i), height * (2 / 3 - i * 13 / 900)) for
                                        i in range(10)]),
 
-                     room([0, 2, 10], 'ship', background='shipBackgroundWithDoor.bmp', foes=[
-                         foe('brokenTurret', display.get_width() / 2, display.get_height() / 2, [0, 2, 10])]),
+                     room([0, -1, 10], 'ship', foes=[
+                         foe('hellhound', width / 2, height / 2, [0, 2, 10]),
+                         foe('tougherShipMiniboss', width / 2, height / 4, [0, 2, 10])],
+                          damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
+                                                      height * 856 / 900) for i in range(32)] + [
+                                            damagingTrap('aFire.png', 26, width * 31 / 1600,
+                                                         (height - yBoundaryShip) * i / 14 + yBoundaryShip) for i in
+                                            range(1, 14)
+                                        ] + [damagingTrap('aFire.png', 26, width * 1569 / 1600,
+                                                          (height - yBoundaryShip) * i / 14 + yBoundaryShip) for i in
+                                             range(1, 14)]
+                                        + [damagingTrap('aFire.png', 26, width * i / 31,
+                                                        height * 44 / 900 + yBoundaryShip) for i in range(1, 13)
+                                           ] + [
+                                            damagingTrap('aFire.png', 26, width * i / 31,
+                                                         height * 44 / 900 + yBoundaryShip) for i in range(19, 31)
+                                        ]),
 
-                     room([0, 3, 10], 'ship', background='shipBackgroundWithDoor.bmp', foes=[
-                         foe('flamingRobot', display.get_width() / 2, display.get_height() / 6, [0, 2, 10])
+                     room([0, 2, 10], 'ship', foes=[
+                         foe('brokenTurret', width / 2, height / 2, [0, 2, 10])]),
+
+                     room([0, 3, 10], 'ship', foes=[
+                         foe('flamingRobot', width / 2, height / 3, [0, 2, 10])
                      ], waves=[[
-                         foe('brokenTurret', display.get_width() / 3, display.get_height() * 2 / 3, [0, 3, 10], 1),
-                         foe('brokenTurret', display.get_width() * 2 / 3, display.get_height() * 2 / 3, [0, 3, 10], 1)
+                         foe('brokenTurret', width / 3, height * 2 / 3, [0, 3, 10]),
+                         foe('brokenTurret', width * 2 / 3, height * 2 / 3, [0, 3, 10])
                      ]]),
 
-                     room([0, 4, 10], 'ship', background='shipBackgroundWithDoor.bmp', foes=[
-                         foe('robotBodyguard', display.get_width() / 2, display.get_height() / 2, [0, 4, 10])
-                     ], waves=[[foe('robotBodyguard', display.get_width() / 2, display.get_height() / 2, [0, 4, 10]),
-                                foe('flamingRobot', display.get_width() / 2, display.get_height() / 3, [0, 4, 10]),
-                                foe('brokenTurret', display.get_width() / 2, display.get_height() / 4, [0, 4, 10], 1)]]),
+                     room([0, 4, 10], 'ship', foes=[
+                         foe('robotBodyguard', width / 2, height / 2, [0, 4, 10])
+                     ], waves=[[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10]),
+                                foe('flamingRobot', width / 2, height / 3, [0, 4, 10]),
+                                foe('brokenTurret', width / 2, height / 4, [0, 4, 10])]]),
 
-                     room([0, 5, 10], 'ship', background='shipBackgroundWithDoor.bmp', foes=[
-                         foe('robotBodyguard', display.get_width() / 2, display.get_height() / 2, [0, 4, 10]),
-                         foe('brokenTurret', display.get_width() / 2, display.get_height() / 3, [0, 4, 10]),
-                     ], damagingTraps=[damagingTrap('fireTrap2.png', 26, display.get_width() / 20
-                                                    * (1 + 2 * i), display.get_height() * (3 / 4 - i * 13 / 900)) for
+                     room([0, 5, 10], 'ship', foes=[
+                         foe('robotBodyguard', width / 2, height / 2, [0, 4, 10]),
+                         foe('brokenTurret', width / 2, height / 3, [0, 4, 10]),
+                     ], damagingTraps=[damagingTrap('fireTrap2.png', 26, width / 20
+                                                    * (1 + 2 * i), height * (5 / 8 - i * 13 / 900)) for
                                        i in range(10)],
-                          waves=[[foe('flamingRobot', display.get_width() / 4, display.get_height() / 2, [0, 4, 10], 1),
-                                  foe('flamingRobot', display.get_width() * 3 / 4, display.get_height() / 2, [0, 4, 10],
-                                      1),
-                                  foe('brokenTurret', display.get_width() / 2, display.get_height() / 4, [0, 4, 10], 1),
-                                  foe('brokenTurret', display.get_width() / 2, display.get_height() * 3 / 4, [0, 4, 10],
-                                      1)],
-                                 [foe('robotBodyguard', display.get_width() / 10, display.get_height() / 4, [0, 4, 10],
-                                      1),
-                                  foe('robotBodyguard', display.get_width() / 10, display.get_height() * .75, [0, 4, 10],
-                                      1),
-                                  foe('robotBodyguard', display.get_width() * 9 / 10, display.get_height() / 5, [0, 4, 10],
-                                      1),
-                                  foe('robotBodyguard', display.get_width() * 9 / 10, display.get_height() * .75, [0, 4, 10],
-                                      1),
-                                  ]])]
+                          waves=[[foe('flamingRobot', width / 4, height / 2, [0, 4, 10]),
+                                  foe('flamingRobot', width * 3 / 4, height / 2, [0, 4, 10], ),
+                                  foe('brokenTurret', width / 2, height / 4, [0, 4, 10]),
+                                  foe('brokenTurret', width / 2, height * 3 / 4, [0, 4, 10], )],
+                                 [foe('robotBodyguard', width / 10, height / 4, [0, 4, 10], ),
+                                  foe('robotBodyguard', width / 10, height * .75, [0, 4, 10], ),
+                                  foe('robotBodyguard', width * 9 / 10, height / 5, [0, 4, 10], ),
+                                  foe('robotBodyguard', width * 9 / 10, height * .75, [0, 4, 10], ),
+                                  ]]),
+
+                     room([0, 6, 10], 'ship', foes=[
+                         foe('robotBodyguard', width / 2, height / 2, [0, 6, 10],
+                             spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('brokenTurret', width / 2, height / 2, [0, 6, 10])]),
+                                             foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('robotBodyguard', width / 2, height / 2, [0, 6, 10])]),
+                                             foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('flamingRobot', width / 2, height / 2, [0, 6, 10])])]),
+                         foe('flamingRobot', width / 2, height / 3, [0, 6, 10],
+                             spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('brokenTurret', width / 2, height / 2, [0, 6, 10])]),
+                                             foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('robotBodyguard', width / 2, height / 2, [0, 6, 10])]),
+                                             foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('flamingRobot', width / 2, height / 2, [0, 6, 10])])]),
+                         foe('brokenTurret', width / 2, height / 4, [0, 6, 10],
+                             spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('brokenTurret', width / 2, height / 2, [0, 6, 10])]),
+                                             foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('robotBodyguard', width / 2, height / 2, [0, 6, 10])]),
+                                             foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
+                                                 spawnsOnDefeat=[
+                                                     foe('flamingRobot', width / 2, height / 2, [0, 6, 10])])])
+                     ]), ]
 
         for place in shipRooms:
             self.rooms[tuple(place.coordinate)] = place
@@ -84,22 +130,30 @@ class world:
 
         for place in list(self.rooms.values()):
             if (place.coordinate[0] - 1, place.coordinate[1], place.coordinate[2]) in coordinates:
-                place.doors.append(plainSprite('door.bmp', display.get_width() * 31 / 3200,
-                                               display.get_height() / 2))
+                place.doors.append(plainSprite('door.bmp', width * 31 / 3200,
+                                               height / 2))
 
             if (place.coordinate[0] + 1, place.coordinate[1], place.coordinate[2]) in coordinates:
-                place.doors.append(plainSprite('door.bmp', display.get_width() * 3169 / 3200,
-                                               display.get_height() / 2))
+                place.doors.append(plainSprite('door.bmp', width * 3169 / 3200,
+                                               height / 2))
 
             if (place.coordinate[0], place.coordinate[1] + 1, place.coordinate[2]) in coordinates:
-                place.doors.append(plainSprite('door.bmp', display.get_width() / 2,
-                                               display.get_height() / 45))
+                place.doors.append(plainSprite('door.bmp', width / 2,
+                                               height / 45))
 
             if (place.coordinate[0], place.coordinate[1] - 1, place.coordinate[2]) in coordinates:
-                place.doors.append(plainSprite('door.bmp', display.get_width() / 2,
-                                               display.get_height() * 44 / 45))
+                place.doors.append(plainSprite('door.bmp', width / 2,
+                                               height * 44 / 45))
 
 
 rooms = world()
 # rooms.makeRooms(16, 'desert')
 rooms.addDoors()
+
+
+def saveWorld(file):
+    saveWithPickle(f'worldSave{file}.pickle', rooms)
+
+
+def loadWorld(file):
+    return loadWithPickle(f'worldSave{file}.pickle')

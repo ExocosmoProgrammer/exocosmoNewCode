@@ -1,8 +1,9 @@
 import keyboard
 import pygame
 from world import rooms
-from variables import IMAGES, GAMESPEED, display, FILE, MOVESPEED
-from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle
+from variables import IMAGES, GAMESPEED, display, MOVESPEED, width, height
+from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle, \
+    greater
 from rects import rect
 from bullets import bullet
 from item import item
@@ -25,8 +26,11 @@ class player:
         self.x = self.place.centerx
         self.y = self.place.centery
         self.bullets = []
-        self.hitbox = rect(pygame.Rect(self.place.left, self.place.top + 20, self.place.width,
-                                       self.place.height - 20), 0)
+        self.speed = 1
+        self.sprinting = 0
+        self.hitbox = rect(pygame.Rect(self.place.left + width / 320, self.place.top + height / 45,
+                                       self.place.width - width / 160,
+                                       self.place.height - height / 45), 0)
 
         # The animations are dictionaries with each key representing a direction and the key's value being an
         # animation for if you face the direction the key represents.
@@ -48,8 +52,8 @@ class player:
 
         # hr and vr represent horizontal movement per frame and vertical movement per frame.
 
-        self.hr = (keyboard.is_pressed('d') - keyboard.is_pressed('a')) * GAMESPEED
-        self.vr = (keyboard.is_pressed('s') - keyboard.is_pressed('w')) * GAMESPEED
+        self.hr = (keyboard.is_pressed('d') - keyboard.is_pressed('a')) * GAMESPEED * 1.3
+        self.vr = (keyboard.is_pressed('s') - keyboard.is_pressed('w')) * GAMESPEED * 1.3
 
         # When you turn to face a different way, your animation is set to your directionlessAnimation's
         # value corresponding to your direction.
@@ -61,8 +65,9 @@ class player:
         self.slideTime = 0
         self.mapShown = 0
         self.stamina = 100
-        self.hpRect = pygame.Rect(0, 3, display.get_width() / 10, display.get_height() / 90)
-        self.hpGoneRect = pygame.Rect(0, 3, display.get_width() / 10, display.get_height() / 90)
+        self.file = None
+        self.hpRect = pygame.Rect(0, 3, width / 10, height / 90)
+        self.hpGoneRect = pygame.Rect(0, 3, width / 10, height / 90)
         self.bullets = []
         self.invincibility = 0
         self.speed = 0.5
@@ -76,8 +81,8 @@ class player:
         for i in range(3):
             for j in range(10):
                 self.inventoryBoxes.append(plainSprite(
-                    'inventoryBox.png', j * boxWidth * 2 + display.get_width() * 13 / 80 + boxWidth / 2,
-                    i * 3 * boxHeight + display.get_height() * 7 / 30 + boxHeight / 2))
+                    'inventoryBox.png', j * boxWidth * 2 + width * 13 / 80 + boxWidth / 2,
+                    i * 3 * boxHeight + height * 7 / 30 + boxHeight / 2))
 
         for i in range(100):
             self.inventory.append(item('empty', 'invisiblePixels.png'))
@@ -100,7 +105,7 @@ class player:
     def hurt(self, damage):
         self.hp -= damage
         self.invincibility = 250
-        self.hpRect = pygame.Rect(0, 3, self.hp * display.get_width() / (10 * self.maxHp), display.get_height() / 90)
+        self.hpRect = pygame.Rect(0, 3, self.hp * width / (10 * self.maxHp), height / 90)
 
     def progressAnimation(self):
         """The progressAnimation changes your animation, directionlessAnimation, and sprite as appropriate."""
@@ -130,21 +135,19 @@ class player:
         self.sprite = self.animation[int(self.animationFrame)]
 
     def slide(self):
-        """Later, the slide function should take away stamina but temporarily increase your speed. My brother wanted
-        the ability to slide in this game."""
-        if self.stamina >= 25 and self.slideTime <= 0:
-            self.slideTime = 50
-            self.stamina -= 100
+        if self.stamina >= 200 and self.slideTime <= 0:
+            self.slideTime = 85
+            self.stamina -= 200
             self.invincibility = 2
 
     def dash(self):
-        if self.stamina == 500 and self.slideTime <= 0:
-            self.slideTime = 150
-            self.stamina = 0
-            self.invincibility = 250
+        if self.stamina >= 250 and self.slideTime <= 0:
+            self.slideTime = 110
+            self.stamina -= 250
+            self.invincibility = 160
 
     def useActiveItem(self):
-        if pygame.mouse.get_pressed()[0] and self.fireCooldown <= 0:
+        if pygame.mouse.get_pressed()[0] and self.fireCooldown <= 0 and not self.sprinting and self.slideTime <= 0:
             try:
                 self.itemFunctions[self.activeItem.name]()
 
@@ -153,14 +156,19 @@ class player:
 
     def useNanotechRevolver(self):
         """The useNanotechRevolver function will be your attack while your active item is the nanotechRevolver."""
-        path = getPath(GAMESPEED * 3, (self.x, self.y), pygame.mouse.get_pos())
-        self.bullets.append(bullet(path[0], path[1], 1, 'basicRangeProjectile_d.png', self.x, self.y))
-        self.fireCooldown = 100
+        path = getPath(4, (self.x, self.y), pygame.mouse.get_pos())
+        self.bullets.append(bullet(path[0], path[1], 1, 'basicRangeProjectile_d.png', self.x, self.y,
+                                   hasShrunkHitbox=0))
+        self.fireCooldown = 70
 
     def getInput(self):
         """The getInput function will have actions being performed based on player input."""
         self.hr = (keyboard.is_pressed('d') - keyboard.is_pressed('a'))
         self.vr = (keyboard.is_pressed('s') - keyboard.is_pressed('w'))
+        self.sprinting = keyboard.is_pressed('space')
+
+        if self.slideTime > 0:
+            self.sprinting = 0
 
         if self.inventoryShown:
             self.updateInventory()
@@ -171,7 +179,6 @@ class player:
         for event in pygame.event.get(pygame.KEYDOWN):
 
             if event.key == pygame.K_l:
-                print('shown')
                 if self.inventoryShown:
                     self.inventoryShown = 0
 
@@ -193,22 +200,34 @@ class player:
                 else:
                     self.mapShown = 1
 
-            elif pygame.key.get_mods() & pygame.KMOD_CTRL:
+            elif pygame.key.get_mods() & pygame.KMOD_CTRL and not self.sprinting:
                 self.slide()
 
-            elif pygame.key.get_mods() & pygame.KMOD_SHIFT:
+            elif pygame.key.get_mods() & pygame.KMOD_SHIFT and not self.sprinting:
                 self.dash()
 
             else:
                 for i in range(10):
                     exec(f'if event.key == pygame.K_{i}: self.activeItem = self.inventory[{i}]')
 
+    def updateSpeed(self):
+        if self.slideTime <= 0:
+            if self.sprinting:
+                self.speed = greater(1.7, self.speed - 0.05)
+
+            else:
+                self.speed = greater(1, self.speed - 0.5)
+
+        else:
+            self.speed = 4
+
     def updateStats(self):
         """The updateStats function should modify your attributes each frame."""
         self.slideTime -= GAMESPEED
         self.stamina = lesser(self.stamina + GAMESPEED, 500)
         self.fireCooldown -= GAMESPEED
-        self.invincibility -= 1
+        self.invincibility -= GAMESPEED
+        self.updateSpeed()
 
     def updateItemPositions(self):
         for i in range(30):
@@ -229,10 +248,10 @@ class player:
     def showInfo(self):
         display.fill("#1abdbd", self.hpGoneRect)
         display.fill("#cd300e", self.hpRect)
-        display.fill('#90b133', pygame.Rect(0, display.get_height() / 20, display.get_width() / 10,
-                                  display.get_height() / 90))
-        staminaRect = pygame.Rect(0, display.get_height() / 20, display.get_width() * self.stamina / 5000,
-                                  display.get_height() / 90)
+        display.fill('#90b133', pygame.Rect(0, height / 20, width / 10,
+                                  height / 90))
+        staminaRect = pygame.Rect(0, height / 20, width * self.stamina / 5000,
+                                  height / 90)
         display.fill("#1abdbd", staminaRect)
 
     def updateInventory(self):
@@ -268,28 +287,22 @@ class player:
         for coordinate in list(rooms.rooms.keys()):
             if coordinate[2] == self.room[2] and abs(self.room[1] - coordinate[1]) < 6 \
                     and abs(self.room[0] - coordinate[0]) < 6:
-                print(coordinate)
                 display.blit(IMAGES[rooms.rooms[coordinate].mapMarker],
-                             pygame.Rect(display.get_width() * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
-                                         display.get_height() * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
-                                         9 * display.get_width() / 320, 8 * display.get_height() / 225))
+                             pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
+                                         height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
+                                         9 * width / 320, 8 * height / 225))
 
                 if coordinate == tuple(self.room):
                     display.blit(IMAGES['playerRoomMapImage.png'],
                                  pygame.Rect(
-                                     display.get_width() * 311 / 640, display.get_height() * 434 / 900,
-                                     9 * display.get_width() / 320, 8 * display.get_height() / 225))
+                                     width * 311 / 640, height * 434 / 900,
+                                     9 * width / 320, 8 * height / 225))
 
     def move(self):
         """The move function makes the player move."""
-        if self.slideTime < 0:
-            self.x += self.hr * GAMESPEED * self.speed * MOVESPEED
-            self.y += self.vr * GAMESPEED * self.speed * MOVESPEED
-
-        else:
-            self.x += self.hr * GAMESPEED * 4 * MOVESPEED
-            self.y += self.vr * GAMESPEED * 4 * MOVESPEED
-            self.slideTime -= GAMESPEED
+        self.x += self.hr * GAMESPEED * MOVESPEED * self.speed * 0.9
+        self.y += self.vr * GAMESPEED * MOVESPEED * self.speed * 0.9
+        self.slideTime -= GAMESPEED
 
         self.hitbox.move(self.hr * GAMESPEED * MOVESPEED, self.vr * GAMESPEED * MOVESPEED)
         self.place.centerx = self.x
@@ -303,63 +316,69 @@ class player:
                     self.place.left = 0
 
                 else:
-                    self.place.right = display.get_width()
+                    self.place.right = width
                     self.room[0] -= 1
+                    self.bullets = []
 
             else:
                 self.place.left = 0
             self.x = self.place.centerx
 
-        elif self.place.right > display.get_width():
+        elif self.place.right > width:
             if (self.room[0] + 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
                 if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.right = display.get_width()
+                    self.place.right = width
 
                 else:
                     self.place.left = 0
                     self.room[0] += 1
+                    self.bullets = []
 
             else:
-                self.place.right = display.get_width()
+                self.place.right = width
             self.x = self.place.centerx
 
-        if self.place.top < rooms.rooms[tuple(self.room)].yBoundaries[0]:
+        if self.place.top < rooms.rooms[tuple(self.room)].yBoundaries:
             if (self.room[0], self.room[1] + 1, self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries[0]
+                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes != []:
+                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
 
                 else:
-                    self.place.bottom = display.get_height()
+                    self.place.bottom = height
                     self.room[1] += 1
+                    self.bullets = []
 
             else:
-                self.place.top = rooms.rooms[tuple(self.room)].yBoundaries[0]
+                self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
             self.y = self.place.centery
 
-        elif self.place.bottom > display.get_height():
+        elif self.place.bottom > height:
             if (self.room[0], self.room[1] - 1, self.room[2]) in list(rooms.rooms.keys()):
                 if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.bottom = display.get_height()
+                    self.place.bottom = height
 
                 else:
-                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries[0]
+                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
                     self.room[1] -= 1
+                    self.bullets = []
 
             else:
-                self.place.bottom = display.get_height()
+                self.place.bottom = height
             self.y = self.place.centery
 
     def loadGame(self):
         """The loadGame function should load the player info and the world info."""
-        global pro, rooms
 
-        pro = loadWithPickle(f'playerSave{FILE}.pickle')
-        rooms = loadWithPickle(f'worldSave{FILE}.pickle')
+        try:
+            return loadWithPickle(f'playerSave{self.file}.pickle')
+
+        except FileNotFoundError:
+            open(f'playerSave{self.file}.pickle', 'xb')
+            open(f'worldSave{self.file}.pickle', 'xb')
 
     def saveGame(self):
         """The saveGame function should save the player info and the world info."""
-        saveWithPickle(f'playerSave{FILE}.pickle', player)
-        saveWithPickle(f'worldSave{FILE}.pickle', rooms)
+        saveWithPickle(f'playerSave{self.file}.pickle', self)
 
     def actions(self):
         """The actions function will perform all the player's actions."""

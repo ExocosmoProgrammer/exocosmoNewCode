@@ -12,4 +12,5 @@ class line:
             exec(f'self.{stat} = extra[stat]')
 
     def YAtX(self, x):
+        """return self.slope * x + self.constant"""
         return self.slope * x + self.constant
