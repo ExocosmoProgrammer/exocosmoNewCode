@@ -625,7 +625,7 @@ class foe:
             self.altFireCooldown = 0
 
             if self.mode == 'standard':
-                newMode = random.randint(4, 4)
+                newMode = random.randint(0, 4)
 
                 if newMode == 0:
                     self.mode = 'flamingRobot'
