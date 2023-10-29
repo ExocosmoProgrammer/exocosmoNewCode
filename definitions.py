@@ -3,10 +3,11 @@ import pickle
 import random
 
 import pygame
+from pygame import mixer
+from variables import display, IMAGES, LASERS, BACKGROUNDS, width, height
 
-from variables import display, IMAGES, GAMESPEED, BACKGROUNDS
 
-fullscreenRect = pygame.Rect(0, 0, display.get_width(), display.get_height())
+fullscreenRect = pygame.Rect(0, 0, width, height)
 
 
 def sqrt(x):
@@ -39,8 +40,8 @@ def pointDistance(p1, p2):
 def rotate(point, center, angle):
     """rotate(x, y, z) returns the coordinates of point x rotated z radians around point y."""
     dis = pointDistance(point, center)
-    return [dis * math.cos(getRadians(point[0] - center[0], point[1] - center[1]) + angle),
-            dis * math.sin(getRadians(point[0] - center[0], point[1] - center[1]) + angle)]
+    newAngle = getRadians(point[0] - center[0], point[1] - center[1]) - angle
+    return [center[0] + dis * math.cos(newAngle), center[1] + dis * math.sin(newAngle)]
 
 
 def strIndex(string, character):
@@ -152,6 +153,13 @@ def loadWithPickle(file):
         return pickle.load(fileLoaded)
 
 
+def play(song):
+    mixer.init()
+    mixer.music.load(song)
+    mixer.music.set_volume(2)
+    mixer.music.play(-1)
+
+
 def checkMouseCollision(unrotatedRectangle):
     unrotatedRectangle.getMajorInfo()
 
@@ -164,6 +172,7 @@ def checkMouseCollision(unrotatedRectangle):
 
 def drawToFullScreen(sprite):
     display.blit(BACKGROUNDS[sprite], fullscreenRect)
+
 
 def signOrRandom(x):
     return sign(x) if x != 0 else random.choice([-1, 1])
