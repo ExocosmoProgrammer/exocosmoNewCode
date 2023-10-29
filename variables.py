@@ -5,17 +5,19 @@ import os
 # each new sprite that gets created.
 
 IMAGES = {}
-FILE = 1
 display = pygame.display.set_mode((1600, 900))
-GAMESPEED = 1 / 1.2
-MOVESPEED = display.get_width() * display.get_height() / 1440000
+width = display.get_width()
+height = display.get_height()
+diagonal = (width ** 2 + height ** 2) ** (1 / 2)
+GAMESPEED = 5
+MOVESPEED = 1
 # I resize the images according to the display size.
 
 for i in os.listdir('images'):
-    if i != 'font' and i != 'backgrounds':
+    if i != 'font' and i != 'backgrounds' and i != 'lasers':
         IMAGES[i] = pygame.image.load(f'images/{i}')
-        IMAGES[i] = pygame.transform.scale(IMAGES[i], (IMAGES[i].get_width() * display.get_width() / 1600,
-                                           IMAGES[i].get_height() * display.get_height() / 900))
+        IMAGES[i] = pygame.transform.scale(IMAGES[i], (IMAGES[i].get_width() * width / 1600,
+                                           IMAGES[i].get_height() * height / 900))
 
 for i in os.listdir('images/font'):
     IMAGES[i] = pygame.image.load(f'images/font/{i}')
@@ -23,9 +25,15 @@ for i in os.listdir('images/font'):
 backgroundsList = ['earlyMorningOvergroundDesertBackground.bmp', 'shelterBackgroundBMP.bmp',
                    'altShelterBackgroundBMP.bmp']
 BACKGROUNDS = {}
+LASERS = {}
 
 for i in os.listdir('images/backgrounds'):
-    BACKGROUNDS[i] = pygame.transform.scale(pygame.image.load(f'images/backgrounds/{i}'),
-                                            (display.get_width(), display.get_height()))
+    BACKGROUNDS[i] = pygame.transform.scale(pygame.image.load(f'images/backgrounds/{i}'), (width, height))
 
-yBoundary = 74 * display.get_height() / 900
+
+laserSprites = [f'watchdogLaser{i + 1}.png' for i in range(4)]
+
+for laser in laserSprites:
+    IMAGES[laser] = pygame.transform.scale(IMAGES[laser], (diagonal, IMAGES[laser].get_height() * height / 900))
+
+yBoundaryShip = 85 * height / 900
