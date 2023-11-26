@@ -1,6 +1,6 @@
 import keyboard
 import pygame
-from world import rooms
+from worldFile import rooms
 from variables import IMAGES, GAMESPEED, display, MOVESPEED, width, height
 from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle, \
     greater
@@ -12,28 +12,24 @@ from plainSprites import plainSprite
 
 class player:
     def __init__(self, **extra):
+        self.startingRoom = [0, 0, 10]
+        self.startingCoord = [width / 2, height / 2]
         self.maxHp = 130
         self.hp = 130
         self.fireCooldown = 0
         self.inventoryShown = 0
-        self.sprite = 'newWalkingAnimation_s1.png'
-        self.place = IMAGES[self.sprite].get_rect(center=(display.get_size()[0] / 2, display.get_size()[1] / 2))
         self.room = [0, 0, 10]
-
-        # I use self.x and self.y as coordinates so the bullet's coordinates will be tracked more precisely,
-        # since the player's place's coordinates are rounded each frame.
-
-        self.x = self.place.centerx
-        self.y = self.place.centery
         self.bullets = []
         self.speed = 1
         self.sprinting = 0
+        self.sprite = 'newWalkingAnimation_s1.png'
+        self.place = IMAGES[self.sprite].get_rect(center=(display.get_size()[0] / 2, display.get_size()[1] / 2))
+        self.x = self.place.centerx
+        self.y = self.place.centery
         self.hitbox = rect(pygame.Rect(self.place.left + width / 320, self.place.top + height / 45,
                                        self.place.width - width / 160,
                                        self.place.height - height / 45), 0)
-
-        # The animations are dictionaries with each key representing a direction and the key's value being an
-        # animation for if you face the direction the key represents.
+        self.aggressiveFoes = []
 
         self.idleAnimation = {'w': ['newWalkingAnimation_w1.png'],
                               's': ['newWalkingAnimation_s1.png'],
@@ -50,14 +46,8 @@ class player:
                 for j in range(95):
                     self.walkingAnimation[letter].append(f'newWalkingAnimation_{letter}{i}.png')
 
-        # hr and vr represent horizontal movement per frame and vertical movement per frame.
-
-        self.hr = (keyboard.is_pressed('d') - keyboard.is_pressed('a')) * GAMESPEED * 1.3
-        self.vr = (keyboard.is_pressed('s') - keyboard.is_pressed('w')) * GAMESPEED * 1.3
-
-        # When you turn to face a different way, your animation is set to your directionlessAnimation's
-        # value corresponding to your direction.
-
+        self.hr = (keyboard.is_pressed('d') - keyboard.is_pressed('a')) * GAMESPEED
+        self.vr = (keyboard.is_pressed('s') - keyboard.is_pressed('w')) * GAMESPEED
         self.animation = self.idleAnimation['s'].copy()
         self.directionlessAnimation = self.idleAnimation
         self.animationFrame = 0
@@ -70,9 +60,10 @@ class player:
         self.hpGoneRect = pygame.Rect(0, 3, width / 10, height / 90)
         self.bullets = []
         self.invincibility = 0
-        self.speed = 0.5
+        self.speed = 1
         self.itemFunctions = {'nanotechRevolver': self.useNanotechRevolver}
-        self.inventory = []
+        self.inventory = [item('empty', 'invisiblePixels.png') for i in range(100)]
+        self.activeItem = self.inventory[0]
         self.inventoryBoxes = []
         boxWidth = IMAGES['inventoryBox.png'].get_width()
         boxHeight = IMAGES['inventoryBox.png'].get_height()
@@ -84,11 +75,6 @@ class player:
                     'inventoryBox.png', j * boxWidth * 2 + width * 13 / 80 + boxWidth / 2,
                     i * 3 * boxHeight + height * 7 / 30 + boxHeight / 2))
 
-        for i in range(100):
-            self.inventory.append(item('empty', 'invisiblePixels.png'))
-
-        self.activeItem = self.inventory[0]
-
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
 
@@ -99,8 +85,11 @@ class player:
         self.animationFrame = 0
 
     def gainItem(self, itemGained):
+        activeItemNumber = self.inventory.index(self.activeItem)
         self.emptySlots = [i for i in self.inventory[0:30] if i.name == 'empty']
         self.inventory[self.inventory.index(self.emptySlots[0])] = itemGained
+        if self.inventory.index(itemGained) == activeItemNumber:
+            self.activeItem = itemGained
 
     def hurt(self, damage):
         self.hp -= damage
@@ -156,10 +145,10 @@ class player:
 
     def useNanotechRevolver(self):
         """The useNanotechRevolver function will be your attack while your active item is the nanotechRevolver."""
-        path = getPath(4, (self.x, self.y), pygame.mouse.get_pos())
+        path = getPath(6.5, (self.x, self.y), pygame.mouse.get_pos())
         self.bullets.append(bullet(path[0], path[1], 1, 'basicRangeProjectile_d.png', self.x, self.y,
                                    hasShrunkHitbox=0))
-        self.fireCooldown = 70
+        self.fireCooldown = 60
 
     def getInput(self):
         """The getInput function will have actions being performed based on player input."""
@@ -285,12 +274,18 @@ class player:
         display.fill((0, 0, 0))
 
         for coordinate in list(rooms.rooms.keys()):
-            if coordinate[2] == self.room[2] and abs(self.room[1] - coordinate[1]) < 6 \
-                    and abs(self.room[0] - coordinate[0]) < 6:
+            if coordinate[2] == self.room[2] and abs(self.room[1] - coordinate[1]) < 3 \
+                    and abs(self.room[0] - coordinate[0]) < 3:
                 display.blit(IMAGES[rooms.rooms[coordinate].mapMarker],
                              pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
                                          height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
                                          9 * width / 320, 8 * height / 225))
+
+                if 5 > rooms.rooms[coordinate].difficulty > -1:
+                    display.blit(IMAGES['blobSummon.png'],
+                                 pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
+                                             height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
+                                             9 * width / 320, 8 * height / 225))
 
                 if coordinate == tuple(self.room):
                     display.blit(IMAGES['playerRoomMapImage.png'],
@@ -298,44 +293,51 @@ class player:
                                      width * 311 / 640, height * 434 / 900,
                                      9 * width / 320, 8 * height / 225))
 
+    def updateHitbox(self):
+        self.hitbox = rect(pygame.Rect(self.place.left, self.place.top + 20, self.place.width,
+                                       self.place.height - 20), 0)
+
     def move(self):
         """The move function makes the player move."""
         self.x += self.hr * GAMESPEED * MOVESPEED * self.speed * 0.9
         self.y += self.vr * GAMESPEED * MOVESPEED * self.speed * 0.9
         self.slideTime -= GAMESPEED
 
-        self.hitbox.move(self.hr * GAMESPEED * MOVESPEED, self.vr * GAMESPEED * MOVESPEED)
         self.place.centerx = self.x
         self.place.centery = self.y
-        self.hitbox = rect(pygame.Rect(self.place.left, self.place.top + 20, self.place.width, self.place.height - 20), 0)
+        self.updateHitbox()
         # The next twelve lines of code should make the display's edges act as boundaries.
 
-        if self.place.left < 0:
+        if self.place.left < rooms.rooms[tuple(self.room)].leftXBoundary:
             if (self.room[0] - 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
                 if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.left = 0
+                    self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
 
                 else:
-                    self.place.right = width
                     self.room[0] -= 1
+                    self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
                     self.bullets = []
+                    self.invincibility = 100
 
             else:
-                self.place.left = 0
+                self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
+
             self.x = self.place.centerx
 
-        elif self.place.right > width:
+        elif self.place.right > rooms.rooms[tuple(self.room)].rightXBoundary:
             if (self.room[0] + 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
                 if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.right = width
+                    self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
 
                 else:
-                    self.place.left = 0
                     self.room[0] += 1
+                    self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
                     self.bullets = []
+                    self.invincibility = 100
 
             else:
-                self.place.right = width
+                self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
+
             self.x = self.place.centerx
 
         if self.place.top < rooms.rooms[tuple(self.room)].yBoundaries:
@@ -347,9 +349,11 @@ class player:
                     self.place.bottom = height
                     self.room[1] += 1
                     self.bullets = []
+                    self.invincibility = 100
 
             else:
                 self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
+
             self.y = self.place.centery
 
         elif self.place.bottom > height:
@@ -358,23 +362,31 @@ class player:
                     self.place.bottom = height
 
                 else:
-                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
                     self.room[1] -= 1
+                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
                     self.bullets = []
+                    self.invincibility = 100
 
             else:
                 self.place.bottom = height
+
             self.y = self.place.centery
 
-    def loadGame(self):
+        self.updateHitbox()
+
+    def foeStats(self):
+        print([vars(foe) for foe in rooms.rooms[tuple(self.room)].foes])
+
+    def loadRooms(self, file):
         """The loadGame function should load the player info and the world info."""
+        global rooms
 
         try:
-            return loadWithPickle(f'playerSave{self.file}.pickle')
+            rooms = loadWithPickle(f'worldSave{file}.pickle')
+            return rooms
 
         except FileNotFoundError:
-            open(f'playerSave{self.file}.pickle', 'xb')
-            open(f'worldSave{self.file}.pickle', 'xb')
+            pass
 
     def saveGame(self):
         """The saveGame function should save the player info and the world info."""
