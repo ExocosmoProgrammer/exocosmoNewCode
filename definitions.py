@@ -138,6 +138,11 @@ def getPath(speed, a, b):
     return [xpath, ypath]
 
 
+def getPartiallyRandomPath(speed, a, b, angleVariationDegreeInt):
+    initialAngle = getDegrees(b[0] - a[0], a[1] - b[1])
+    newAngle = (initialAngle + random.randint(-angleVariationDegreeInt, angleVariationDegreeInt)) * math.pi / 180
+    return [math.cos(newAngle) * speed, math.sin(newAngle) * speed]
+
 def saveWithPickle(file, object):
     try:
         with open(file, 'wb') as saveFile:
@@ -155,7 +160,7 @@ def loadWithPickle(file):
 
 def play(song):
     mixer.init()
-    mixer.music.load(song)
+    mixer.music.load(f'music/{song}')
     mixer.music.set_volume(2)
     mixer.music.play(-1)
 
@@ -176,3 +181,6 @@ def drawToFullScreen(sprite):
 
 def signOrRandom(x):
     return sign(x) if x != 0 else random.choice([-1, 1])
+
+def skip():
+    pass
