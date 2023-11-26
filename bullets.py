@@ -1,7 +1,7 @@
 from variables import IMAGES, GAMESPEED, MOVESPEED, width, height
 from rects import rect
 import pygame
-from definitions import getDegrees
+from definitions import getDegrees, sqrt
 import math
 
 
@@ -11,7 +11,7 @@ class bullet:
                  pointOfRotation=None, dissappearsAtEdges=1, checksCollisionWhen = 'True', endEffect='pass',
                  causeAndEffect={}, bounces=0, delay=0, delayedSprite='moltenDelaySprite.png', durationBasedPlace=None,
                  durationBasedMovement=None, delayedAnimation=None, consistentPoint='center', updatesPlace=False,
-                 **extra):
+                 polarDurationBasedPlace=None, polarMovement=None, radius=0, theta=0, **extra):
         # hr and vr represent horizontal movement per frame and vertical movement per frame.
         self.hr = hr
         self.vr = vr
@@ -29,6 +29,10 @@ class bullet:
         self.movementByDuration = durationBasedMovement
         self.initialDelay = self.delay
         self.consistentPoint = consistentPoint
+        self.polarDurationBasedPlace = polarDurationBasedPlace
+        self.polarMovement = polarMovement
+        self.radius = radius
+        self.theta = theta
 
         if delayedAnimation is not None:
             self.delayedAnimation = delayedAnimation
@@ -46,11 +50,11 @@ class bullet:
             except ZeroDivisionError:
                 self.rotation = 0
 
-        self.y = y
-        self.x = x
+        self.y = self.initialY = y
+        self.x = self.initialX = x
         self.place = pygame.transform.rotate(IMAGES[sprite], self.rotation).get_rect(center=[x, y])
         place = IMAGES[self.sprite].get_rect(center=[x, y])
-        self.hitbox = rect(place, self.rotation * math.pi / 180, pointOfRotation=pointOfRotation)
+        self.hitbox = rect(place, self.rotation * math.pi / 180)
         self.updatesPlace = updatesPlace
         # self.linger represents how long the bullet will exist for.
         self.linger = linger
@@ -91,6 +95,21 @@ class bullet:
         if self.placeByDuration is not None:
             self.x = eval(self.placeByDuration)[0]
             self.y = eval(self.placeByDuration)[1]
+            self.hitbox = rect(self.place, self.rotation * math.pi / 180)
+
+        elif self.polarDurationBasedPlace is not None:
+            self.x = self.initialX + eval(self.polarDurationBasedPlace[0]) * \
+                     math.cos(eval(self.polarDurationBasedPlace[1]))
+            self.y = self.initialY + eval(self.polarDurationBasedPlace[0]) * \
+                     math.sin(eval(self.polarDurationBasedPlace[1]))
+            self.hitbox = rect(self.place, self.rotation * math.pi / 180)
+
+        elif self.polarMovement is not None:
+            self.radius += eval(self.polarMovement)[0]
+            self.theta += eval(self.polarMovement)[1]
+            self.x = self.initialX + self.radius * math.cos(self.theta)
+            self.y = self.initialY + self.radius * math.sin(self.theta)
+            self.hitbox = rect(self.place, self.rotation * math.pi / 180)
 
         self.place.centerx = self.x
         self.place.centery = self.y
@@ -114,5 +133,4 @@ class bullet:
 
     def getSpriteWhenDelayed(self):
         self.delayedSprite = self.delayedAnimation[int((self.initialDelay - self.delay) % len(self.delayedAnimation))]
-        self.place = IMAGES[self.delayedSprite].get_rect(midbottom=self.place.midbottom)
         return self.delayedAnimation[int((self.initialDelay - self.delay) % len(self.delayedAnimation))]
