@@ -9,7 +9,7 @@ display = pygame.display.set_mode((1600, 900))
 width = display.get_width()
 height = display.get_height()
 diagonal = (width ** 2 + height ** 2) ** (1 / 2)
-GAMESPEED = 5
+GAMESPEED = 6
 MOVESPEED = 1
 # I resize the images according to the display size.
 
