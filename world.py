@@ -1,3 +1,5 @@
+import pygame
+
 from room import room
 from plainSprites import plainSprite
 from variables import height, width, yBoundaryShip
@@ -6,15 +8,19 @@ from droppedItem import droppedItem
 from item import item
 from damagingTrap import damagingTrap
 from definitions import saveWithPickle, loadWithPickle
+from teleporter import teleporter
+from rects import rect
 
 import random
 
 
 class world:
     def __init__(self, **extra):
-        self.rooms = {(0, 0, 0): room([0, 0, 0], 'desert')}
+        self.desertCaveDepthTwoEntranceCoord = None
+        self.rooms = {(0, 6, -1): room([0, 6, -1], 'desert', background='topDesertCaveEntranceBackground.bmp', locks=0)}
+        self.unavailableCoords = [(0, 5, -1), (-1, 6, -1), (1, 6, -1)]
         self.potentialCoordinates = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]
-        shipRooms = [room([0, 0, 10], 'ship', background='shipBackgroundWithDoor.bmp'),
+        shipRooms = [room([0, 0, 10], 'ship'),
 
                      room([0, 1, 10], 'ship', droppedItems=[
                          droppedItem(width / 2, height / 2, 'pistolInInventory.png',
@@ -24,8 +30,8 @@ class world:
                                        i in range(10)]),
 
                      room([0, -1, 10], 'ship', foes=[
-                         foe('hellhound', width / 2, height / 2, [0, 2, 10]),
-                         foe('tougherShipMiniboss', width / 2, height / 4, [0, 2, 10])],
+                         foe('hellhound', width / 2, height / 2, [0, 2, 10],
+                             dependentFoes=[foe('tougherShipMiniboss', width / 2, height / 4, [0, 2, 10])])],
                           damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
                                                       height * 856 / 900) for i in range(32)] + [
                                             damagingTrap('aFire.png', 26, width * 31 / 1600,
@@ -71,7 +77,9 @@ class world:
                                   foe('robotBodyguard', width / 10, height * .75, [0, 4, 10], ),
                                   foe('robotBodyguard', width * 9 / 10, height / 5, [0, 4, 10], ),
                                   foe('robotBodyguard', width * 9 / 10, height * .75, [0, 4, 10], ),
-                                  ]]),
+                                  ]], teleporters=[teleporter(width / 2, height / 3, 'mineshaftFromShip.bmp',
+                                                              [0, 6, -1], destinationXandY=[width / 2,
+                                                                                            height * 38 / 39])]),
 
                      room([0, 6, 10], 'ship', foes=[
                          foe('robotBodyguard', width / 2, height / 2, [0, 6, 10],
@@ -112,18 +120,78 @@ class world:
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
 
-    def makeRooms(self, qty, biome):
-        for i in range(qty):
-            coordinate = self.potentialCoordinates[random.randint(0, len(self.potentialCoordinates) - 1)]
-            self.potentialCoordinates.remove(coordinate)
-            self.rooms[tuple(coordinate)] = room(coordinate, biome)
+    def checkAdjacentEmptySpaces(self, coord):
+        adjSpaces = [(coord[0], coord[1] + 1, coord[2]), (coord[0], coord[1] - 1, coord[2]),
+                     (coord[0] + 1, coord[1], coord[2]), (coord[0] - 1, coord[1], coord[2])]
 
-            for position in [[coordinate[0], coordinate[1] + 1, 0],
-                             [coordinate[0], coordinate[1] - 1, 0],
-                             [coordinate[0] + 1, coordinate[1], 0],
-                             [coordinate[0] + 1, coordinate[1], 0]]:
-                if tuple(position) not in list(self.rooms.keys()) and position not in self.potentialCoordinates:
-                    self.potentialCoordinates.append(position)
+        return [space for space in adjSpaces if space not in self.rooms.keys() and space not in self.unavailableCoords]
+
+    def addTopDesertCaveLayerSpecialRooms(self, biome):
+        yCoords = [member.coordinate[1] for member in biome]
+        choices = [member for member in biome if member.coordinate[1] == max(yCoords)]
+        chosenRoom = random.choice(choices)
+        newRoomCoord = (chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 1, chosenRoom.coordinate[2])
+        self.unavailableCoords += [(chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 2, chosenRoom.coordinate[2]),
+                                   (chosenRoom.coordinate[0] - 1, chosenRoom.coordinate[1] + 1,
+                                    chosenRoom.coordinate[2]),
+                                   (chosenRoom.coordinate[0] + 2, chosenRoom.coordinate[1] + 1,
+                                    chosenRoom.coordinate[2])]
+        ledgeDestinationCoord = (chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 1, -2)
+        teleporterHitbox = rect(pygame.Rect(0, 0, width, height * 763 / 1024))
+        self.rooms[newRoomCoord] = room(newRoomCoord, 'desert', background='ledgeToDesertCaveDepthTwo.bmp',
+                                        teleporters=[teleporter(0, 0, 'invisiblePixels.png',
+                                                                list(ledgeDestinationCoord),
+                                                                [width / 2, height * 38 / 39],
+                                                                hitbox=teleporterHitbox)])
+        self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert')
+        self.desertCaveDepthTwoEntranceCoord = ledgeDestinationCoord
+
+    def addMiddleDesertCaveLayerSpecialRooms(self, biome):
+        yCoords = [member.coordinate[1] for member in biome]
+        choices = [member for member in biome if member.coordinate[1] == max(yCoords)]
+        chosenRoom = random.choice(choices)
+        newRoomCoord = (chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 1, chosenRoom.coordinate[2])
+        self.unavailableCoords += [(chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 2, chosenRoom.coordinate[2]),
+                                   (chosenRoom.coordinate[0] - 1, chosenRoom.coordinate[1] + 1,
+                                    chosenRoom.coordinate[2]),
+                                   (chosenRoom.coordinate[0] + 2, chosenRoom.coordinate[1] + 1,
+                                    chosenRoom.coordinate[2])]
+        ledgeDestinationCoord = (chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 1, -3)
+        teleporterHitbox = rect(pygame.Rect(0, 0, width, height * 763 / 1024))
+        self.rooms[newRoomCoord] = room(newRoomCoord, 'desert', background='ledgeToDesertCaveDepthTwo.bmp',
+                                        teleporters=[teleporter(0, 0, 'invisiblePixels.png',
+                                                                list(ledgeDestinationCoord),
+                                                                [width / 2, height * 38 / 39],
+                                                                hitbox=teleporterHitbox)])
+        self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert')
+        self.desertCaveDepthThreeEntranceCoord = ledgeDestinationCoord
+
+    def makeRooms(self, qty, biome, rootRoom, difficultyQtys):
+        potentialCoords = self.checkAdjacentEmptySpaces(rootRoom)
+        calmRooms = []
+
+        for i in range(qty):
+            newRoomCoord = random.choice(potentialCoords)
+            potentialCoords.remove(newRoomCoord)
+            self.rooms[newRoomCoord] = room(newRoomCoord, biome, locks=0)
+            calmRooms.append(self.rooms[newRoomCoord])
+
+            for coord in self.checkAdjacentEmptySpaces(newRoomCoord):
+                if coord not in potentialCoords:
+                    potentialCoords.append(coord)
+
+        if biome == 'desert' and rootRoom[2] == -1:
+            self.addTopDesertCaveLayerSpecialRooms(calmRooms)
+
+        elif biome == 'desert' and rootRoom[2] == -2:
+            self.addMiddleDesertCaveLayerSpecialRooms(calmRooms)
+
+        for key in list(difficultyQtys.keys()):
+            for i in range(difficultyQtys[key]):
+                combatRoom = random.choice(calmRooms)
+                combatRoom.addFoes(key)
+                calmRooms.remove(combatRoom)
+                combatRoom.locks = 1
 
     def addDoors(self):
         coordinates = list(self.rooms.keys())
@@ -147,7 +215,9 @@ class world:
 
 
 rooms = world()
-# rooms.makeRooms(16, 'desert')
+rooms.makeRooms(1, 'desert', (0, 6, -1), {0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0})
+rooms.makeRooms(5, 'desert', rooms.desertCaveDepthTwoEntranceCoord, {0: 0})
+rooms.makeRooms(5, 'desert', rooms.desertCaveDepthThreeEntranceCoord, {0: 0})
 rooms.addDoors()
 
 
