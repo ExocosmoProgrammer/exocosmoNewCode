@@ -12,6 +12,7 @@ class rect:
                            [pyRect.right, pyRect.bottom], [pyRect.left, pyRect.bottom]]
             self.center = [pyRect.centerx, pyRect.centery]
             self.angle = angle
+            self.updatePoints()
 
             if angle != 0:
                 if pointOfRotation is not None:
@@ -31,7 +32,7 @@ class rect:
         self.right = max([point[0] for point in self.points])
         self.bottom = max([point[1] for point in self.points])
         self.top = min([point[1] for point in self.points])
-        self.center = [self.left + self.right / 2, self.top + self.bottom / 2]
+        self.center = [(self.left + self.right) / 2, (self.top + self.bottom) / 2]
         self.centerx = self.center[0]
         self.centery = self.center[1]
         self.width = self.right - self.left
