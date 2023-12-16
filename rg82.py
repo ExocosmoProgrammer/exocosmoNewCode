@@ -2,17 +2,19 @@ import math
 import time
 import datetime
 import pygame
-
 import proFile
 import worldFile
 from definitions import draw, drawToFullScreen, lesser, checkMouseCollision, loadWithPickle, saveWithPickle, play,\
-    greater, sign
+    greater, sign, pointDistance
 import random
 from proFile import pro
-from variables import display, IMAGES, width, height, GAMESPEED
+from variables import display, IMAGES, width, height, GAMESPEED, diagonal
 from button import button
 from bullets import bullet
 from worldFile import rooms
+from word import word
+from textBox import textBox
+from temporaryAnimation import temporaryAnimation
 
 enemyBullets = []
 frameTime = 0
@@ -24,28 +26,48 @@ def proRoom():
     return rooms.rooms[tuple(pro.room)]
 
 
+def getNearbyFoes():
+    foes = []
+
+    for i in range(-3, 4):
+        for j in range(-3, 4):
+            try:
+                foes += rooms.rooms[pro.room[0] + i, pro.room[1] + j, pro.room[2]].foes
+
+            except KeyError:
+                pass
+
+    return foes
+
+
 currentRoom = proRoom()
-# Last I tried using saving and loading, the player loaded properly, but the world did not load right.
 
 
 def save():
     """save() should save the game."""
-    saveWithPickle(f'playerSave{file}.pickle', pro)
-    saveWithPickle(f'worldSave{file}.pickle', rooms)
+    if True:
+        saveWithPickle(f'playerSave{file}.pickle', pro)
+        saveWithPickle(f'worldSave{file}.pickle', rooms)
 
 
 def load():
     """load() should load the player's saved data."""
-    global pro, rooms, agg
-    newRooms = pro.loadRooms(file)
+    global pro, rooms
 
-    if newRooms is not None:
-        rooms = newRooms
+    try:
+        newRooms = pro.loadRooms(file)
 
-    pro = loadWithPickle(f'playerSave{file}.pickle')
-    worldFile.load(file)
-    proFile.load(file)
-    pro.aggressiveFoes = []
+        if newRooms is not None:
+            rooms = newRooms
+
+        pro = loadWithPickle(f'playerSave{file}.pickle')
+        worldFile.load(file)
+        proFile.load(file)
+        pro.aggressiveFoes = []
+
+    except FileNotFoundError or EOFError:
+        rooms = pro.resetRooms()
+        pro = proFile.reset()
 
 
 def drawGame():
@@ -92,6 +114,12 @@ def drawGame():
             else:
                 display.blit(IMAGES[projectile.getSpriteWhenDelayed()], projectile.place)
 
+        for animation in currentRoom.temporaryAnimations:
+            draw(animation)
+
+            if animation.progressAnimation():
+                currentRoom.temporaryAnimations.remove(animation)
+
         for enemy in currentRoom.foes:
             if enemy.showsHp:
                 enemy.showHp()
@@ -111,35 +139,55 @@ def foeActions():
     """foeActions() should make foes act."""
     global enemyBullets
 
-    for enemy in currentRoom.foes:
-        enemy.actAsFoe(pro)
-        enemyBullets += enemy.newBullets
-        currentRoom.foes += enemy.newFoes
-        enemy.newFoes = []
-        enemy.newBullets = []
-
-    for enemy in pro.aggressiveFoes:
-        if enemy.room[2] == pro.room[2] and enemy not in currentRoom.foes:
-            axisChoices = ['x', 'y']
-
-            if enemy.room[0] == pro.room[0] or (enemy.room[0] + sign(pro.room[0] - enemy.room[0]),
-                                                enemy.room[1], enemy.room[2]) not in rooms.rooms:
-                axisChoices.remove('x')
-
-            if enemy.room[1] == pro.room[1] or (enemy.room[0], enemy.room[1] + sign(pro.room[1] - enemy.room[1]),
-                                                enemy.room[2]) not in rooms.rooms:
-                axisChoices.remove('y')
-
-            if axisChoices:
+    for enemy in getNearbyFoes():
+        if enemy not in pro.aggressiveFoes:
+            if enemy.spawnDelay <= 0:
                 try:
                     rooms.rooms[tuple(enemy.room)].foes.remove(enemy)
 
                 except ValueError:
                     pass
 
-                axis = random.choice(axisChoices)
-                enemy.chaseThroughRooms(pro, axis)
+                enemy.wanderingMethod(rooms)
                 rooms.rooms[tuple(enemy.room)].foes.append(enemy)
+
+                if pointDistance((enemy.x, enemy.y), (pro.x, pro.y)) <= enemy.aggressionRadius * diagonal / 1836 and \
+                        enemy in currentRoom.foes:
+                    pro.aggressiveFoes.append(enemy)
+
+            else:
+                enemy.spawnDelay -= GAMESPEED
+
+    for enemy in pro.aggressiveFoes:
+        if enemy.room[2] == pro.room[2]:
+            if enemy not in currentRoom.foes:
+                axisChoices = ['x', 'y']
+
+                if enemy.room[0] == pro.room[0] or (enemy.room[0] + sign(pro.room[0] - enemy.room[0]),
+                                                    enemy.room[1], enemy.room[2]) not in rooms.rooms:
+                    axisChoices.remove('x')
+
+                if enemy.room[1] == pro.room[1] or (enemy.room[0], enemy.room[1] + sign(pro.room[1] - enemy.room[1]),
+                                                    enemy.room[2]) not in rooms.rooms:
+                    axisChoices.remove('y')
+
+                if axisChoices:
+                    try:
+                        rooms.rooms[tuple(enemy.room)].foes.remove(enemy)
+
+                    except ValueError:
+                        pass
+
+                    axis = random.choice(axisChoices)
+                    enemy.chaseThroughRooms(pro, axis)
+                    rooms.rooms[tuple(enemy.room)].foes.append(enemy)
+
+            else:
+                enemy.actAsFoe(pro)
+                enemyBullets += enemy.newBullets
+                currentRoom.foes += enemy.newFoes
+                enemy.newFoes = []
+                enemy.newBullets = []
 
 
 def clearBullets():
@@ -188,11 +236,17 @@ def checkDamagingCollisionsToPro():
                 if projectile.piercing < 0:
                     projectile.linger = 0
 
+                if projectile.impactAnimation is not None:
+                    currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
+                                                                              projectile.x, projectile.y))
+
                 return 1
 
         for foe in currentRoom.foes:
             if foe.spawnDelay <= 0 < foe.damage and foe.hitbox.checkCollision(pro.hitbox):
                 pro.hurt(foe.damage)
+                print(foe.hitbox.points, pro.hitbox.points, 'collision', pro.hp)
+
                 return 1
 
         for trap in currentRoom.damagingTraps:
@@ -213,7 +267,7 @@ def checkDroppedItemCollisionsWithPro():
 
 
 def checkTeleporterCollisionsWithPro():
-    if not currentRoom.foes:
+    if not currentRoom.foes or True:
         for member in currentRoom.teleporters:
             if pro.hitbox.checkCollision(member.hitbox):
                 pro.room = member.destination[:]
@@ -248,13 +302,35 @@ def checkCollisionsToFoes():
 
                         if projectile.piercing < 0:
                             projectile.linger = 0
+
+                            if projectile.impactAnimation is not None:
+                                currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
+                                                                                          projectile.x, projectile.y))
+
                             break
+
+
+def checkCollisionsToEnvironmentObjects():
+    for thing in currentRoom.environmentObjects:
+        for projectile in pro.bullets + enemyBullets:
+            if projectile.hitbox.checkCollision(thing.hitbox):
+                thing.hp -= projectile.damage
+
+                if thing.hp <= 0:
+                    currentRoom.environmentObjects.remove(thing)
+
+                    try:
+                        currentRoom.droppedItems.append(thing.drops)
+
+                    except AttributeError:
+                        pass
 
 
 def checkCollisions():
     """checkCollisions() checks collision for every case where collision needs to be checked."""
     checkCollisionWithPro()
     checkCollisionsToFoes()
+    checkCollisionsToEnvironmentObjects()
 
 
 def removeFoes():
@@ -262,14 +338,19 @@ def removeFoes():
     foes are gotten rid of."""
 
     for foe in currentRoom.foes:
-        if foe.hp <= 0:
-            currentRoom.foes.remove(foe)
+        print(foe.hp, 'hp')
 
-            try:
+        if foe.hp <= 0:
+            print('removed')
+
+            while foe in currentRoom.foes:
+                currentRoom.foes.remove(foe)
+
+            while foe in pro.aggressiveFoes:
                 pro.aggressiveFoes.remove(foe)
 
-            except ValueError:
-                pass
+            if foe.deathAnimation is not None:
+                currentRoom.temporaryAnimations.append(temporaryAnimation(foe.deathAnimation, foe.x, foe.y))
 
             if foe.spawnsOnDefeat is not None:
 
@@ -286,25 +367,34 @@ def removeFoes():
 def roomClearingProcedure():
     """roomClearingProcedure() should add more enemies to the player's room or heal the player as is wanted."""
     currentRoom.wave += 1
+    print(currentRoom.foes, pro.aggressiveFoes, 'howcouldiforget')
 
-    try:
-        currentRoom.foes = currentRoom.waves[currentRoom.wave].copy()
-        for foe in currentRoom.foes:
-            foe.spawnDelay = 1000
+    if currentRoom.locks:
+        try:
+            print(currentRoom.foes, pro.aggressiveFoes, 'howcouldiforgetagain')
+            currentRoom.foes = currentRoom.waves[currentRoom.wave].copy()
+            print('thrice', currentRoom.foes)
 
-    except IndexError:
-        if currentRoom.locks:
-            pro.hp = lesser(130, pro.hp + 40)
-            pro.hpRect = pygame.Rect(0, 3, pro.hp * width / (10 * pro.maxHp), height / 90)
-            currentRoom.foes = []
-            save()
-            currentRoom.locks = 0
+            for foe in currentRoom.foes:
+                foe.spawnDelay = 250
 
-            if currentRoom.coordinate == [0, 5, 1]:
-                pro.startingRoom = [0, 5, 1]
-                pro.startingCoord = [width / 2, 3 * height / 4]
-                rooms.rooms[(0, 1, 10)].damagingTraps = []
-                currentRoom.damagingTraps = []
+        except IndexError:
+            if currentRoom.locks:
+                pro.hp = lesser(130, pro.hp + 40)
+                pro.hpRect = pygame.Rect(0, 3, pro.hp * width / (10 * pro.maxHp), height / 90)
+                currentRoom.foes = []
+                currentRoom.locks = 0
+
+                if currentRoom.coordinate == [0, 5, 1]:
+                    pro.startingRoom = [0, 5, 1]
+                    pro.startingCoord = [width / 2, 3 * height / 4]
+                    rooms.rooms[(0, 1, 10)].damagingTraps = []
+                    currentRoom.damagingTraps = []
+
+                save()
+
+    else:
+        save()
 
 
 def removeBullets():
@@ -326,10 +416,6 @@ def roomSwitchingProcedure():
     clearBullets()
     currentRoom = proRoom()
 
-    for enemy in currentRoom.foes:
-        if enemy not in pro.aggressiveFoes:
-            pro.aggressiveFoes.append(enemy)
-
     for spot in rooms.rooms.values():
         if spot.difficulty == -1:
             try:
@@ -344,7 +430,6 @@ def roomSwitchingProcedure():
 def switchMusic():
     global song
     depth = currentRoom.coordinate[2]
-    print(depth, currentRoom.biome)
     initialSong = song
 
     if currentRoom.biome == 'ship':
@@ -368,7 +453,12 @@ def runGame():
     global currentRoom
     initialTime = datetime.datetime.now()
     initialRoom = proRoom()
-    pro.actions()
+
+    if pro.actions():
+        for enemy in proRoom().foes:
+            if enemy not in pro.aggressiveFoes:
+                pro.aggressiveFoes.append(enemy)
+
     currentRoom = proRoom()
     foeActions()
     moveBullets()
@@ -376,7 +466,7 @@ def runGame():
     removeBullets()
     drawGame()
     removeFoes()
-    proRoom().action()
+    currentRoom.action()
 
     if initialRoom != currentRoom:
         roomSwitchingProcedure()
@@ -421,8 +511,9 @@ while file is None:
 
 load()
 
-while pro.hp > -float(0):
-    time.sleep(greater(0.0336 - runGame().seconds, 0))
-
 while True:
-    pygame.event.pump()
+    while pro.hp > -float('inf'):
+        time.sleep(greater(0.0336 - runGame().seconds, 0))
+
+    while True:
+        pygame.event.pump()
