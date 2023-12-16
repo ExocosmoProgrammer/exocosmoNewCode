@@ -11,7 +11,7 @@ class bullet:
                  pointOfRotation=None, dissappearsAtEdges=1, checksCollisionWhen = 'True', endEffect='pass',
                  causeAndEffect={}, bounces=0, delay=0, delayedSprite='moltenDelaySprite.png', durationBasedPlace=None,
                  durationBasedMovement=None, delayedAnimation=None, consistentPoint='center', updatesPlace=False,
-                 polarDurationBasedPlace=None, polarMovement=None, radius=0, theta=0, **extra):
+                 polarDurationBasedPlace=None, polarMovement=None, radius=0, theta=0, impactAnimation=None, **extra):
         # hr and vr represent horizontal movement per frame and vertical movement per frame.
         self.hr = hr
         self.vr = vr
@@ -19,6 +19,7 @@ class bullet:
         self.sprite = sprite
         self.dissappearsAtEdges = dissappearsAtEdges
         self.checksCollisionWhen = checksCollisionWhen
+        self.impactAnimation = impactAnimation
         self.endEffect = endEffect
         self.conditionalEffects = causeAndEffect
         self.bounces = bounces
