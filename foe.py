@@ -4,7 +4,7 @@ import pygame
 
 from bullets import bullet
 from definitions import getPath, sqrt, signOrRandom, getRadians, pointDistance, sign, lesser, greater, \
-    getPartiallyRandomPath
+    getPartiallyRandomPath, skip, plusOrMinus, getDegrees
 from variables import IMAGES, GAMESPEED, MOVESPEED, width, height, display, diagonal
 from rects import rect
 import math
@@ -18,6 +18,7 @@ class foe:
             dependentFoes = []
 
         self.spawnsOnDefeat = None
+        self.deathAnimation = None
         self.type = name
         self.rotated = False
         self.angle = 0
@@ -33,7 +34,8 @@ class foe:
         self.newBullets = []
         self.newFoes = []
         self.cooldownPerRoomSwitch = 525
-        self.fireCooldown = 200
+        self.hasFullHitbox = True
+        self.fireCooldown = random.randint(100, 400)
         actions = {'brokenTurret': self.actAsBrokenTurret, 'flamingRobot': self.actAsFlamingRobot,
                    'robotBodyguard': self.actAsRobotBodyguard, 'shipMiniboss': self.actAsShipMiniboss,
                    'temporaryBrokenTurret': self.actAsTemporaryBrokenTurret,
@@ -45,31 +47,51 @@ class foe:
                    'desertCaveSpittingGrub': self.actAsDesertCaveSpittingGrub,
                    'desertCaveJellyfish': self.actAsDesertCaveJellyfish,
                    'desertCaveSmallFly': self.actAsDesertCaveSmallFly,
-                   'desertCaveLargeFly': self.actAsDesertCaveLargeFly}
+                   'desertCaveLargeFly': self.actAsDesertCaveLargeFly, 'desertCaveSpider': self.actAsDesertCaveSpider,
+                   }
+        wanderingMethods = {'brokenTurret': skip, 'flamingRobot': skip, 'robotBodyguard': skip,
+                            'tougherShipMiniboss': skip, 'hellhound': skip, 'desertCaveLargeFly': skip,
+                            'desertCaveSmallFly': skip}
+
+        try:
+            self.wanderingMethod = wanderingMethods[name]
+
+        except KeyError:
+            self.wanderingMethod = self.actAsGenericWanderingFoe
+
         self.action = actions[self.type]
-        self.room = room
+        self.room = list(room)
         self.shieldedBy = None
         self.animationFrame = 0
         self.dependentFoes = dependentFoes
+        self.aggressionRadius = 225
+        self.turnCooldownWhileWandering = 0
+        self.maximumDistanceFromHomeWhileWandering = 1
+        self.initialRoom = list(self.room).copy()
 
         if name == 'brokenTurret':
             self.hp = 10
             self.sprite = 'brokenTurret.png'
             self.damage = 26
             self.rotated = True
+            self.fireCooldown = 0
+            self.aggressionRadius = float('inf')
 
         elif name == 'flamingRobot':
             self.hp = 5
             self.sprite = 'flamingRobotTemporarySprite.png'
             self.damage = 26
             self.accelerationCooldown = 0
+            self.fireCooldown = 0
+            self.aggressionRadius = float('inf')
 
         elif name == 'robotBodyguard':
             self.hp = 15
             self.sprite = 'temporaryRobotBodyguard.png'
             self.damage = 26
-            self.modeDuration = random.randint(100, 2000)
+            self.modeDuration = random.randint(100, 1400)
             self.mode = 'chasing'
+            self.aggressionRadius = float('inf')
 
         elif name == 'antlionLarva':
             self.hp = 3
@@ -90,13 +112,12 @@ class foe:
             self.hp = 23
             self.sprite = 'desertCaveSummonerFrame2.png'
             self.animation = [f'desertCaveSummoner2Frame{i}.png' for i in range(1, 4) for j in range(30)]
-            print(self.animation)
             self.damage = 0
             self.fireCooldown = 500
             self.altFireCooldown = 1000
             self.thirdFireCooldown = 1500
             self.spawnDelay = random.randint(50, 500)
-            self.cooldownPerRoomSwitch = 125
+            self.cooldownPerRoomSwitch = 0
 
         elif name == 'desertCaveSpittingGrub':
             self.hp = 2
@@ -109,26 +130,38 @@ class foe:
             self.rotated = True
             self.angle = 0
             self.damage = 35
-            self.sprite = 'desertCaveJellyfish.png'
+            self.sprite = 'desertCaveJellyfishFrame1.png'
             self.momentum = 1
             self.fireCooldown = 0
+            self.animation = [f'desertCaveJellyfishFrame{i}.png' for i in range(1, 5) for j in range(50)]
+            self.deathAnimation = [f'desertCaveJellyfishDeathFrame{i}.png' for i in [1, 2] for j in range(60)]
 
         elif name == 'desertCaveLargeFly':
-            self.hp = 10
+            self.hp = 15
             self.damage = 20
-            self.sprite = 'desertCaveLargeFly.png'
+            self.sprite = 'largeFlyFrame1.png'
             self.summons = {'left': None, 'top': None, 'right': None}
             self.cooldownPerRoomSwitch = float('inf')
+            self.animation = [f'largeFlyFrame{i}.png' for i in [1, 2] for j in range(45)]
+            self.deathAnimation = [f'desertCaveLargeFlyDeathFrame{i}.png' for i in [1, 2] for j in range(150)]
 
         elif name == 'desertCaveSmallFly':
             self.hp = 1
             self.damage = 20
             self.sprite = 'desertCaveSmallFlyFrame1.png'
-            self.animation = [f'desertCaveSmallFlyFrame{i}.png' for i in range(1, 3) for j in range(15)]
+            self.animation = [f'desertCaveSmallFlyFrame{i}.png' for i in [1, 2] for j in range(15)]
             self.currentDuration = 0
-            self.initialHr = 0
-            self.initialVr = 0
             self.cooldownPerRoomSwitch = float('inf')
+            self.aggressionRadius = float('inf')
+            self.deathAnimation = [f'desertCaveSmallFlyDeathFrame{i}.png' for i in [1, 2] for j in range(100)]
+
+        elif name == 'desertCaveSpider':
+            self.hp = 30
+            self.damage = 50
+            self.sprite = 'desertCaveSpider.png'
+            self.altFireCooldown = float('inf')
+            self.cooldownPerRoomSwitch = 50
+            self.aggressionRadius = float('inf')
 
         elif name == 'tougherShipMiniboss':
             self.hp = 500
@@ -203,10 +236,11 @@ class foe:
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
 
+            if self.type == 'desertCaveSmallFly':
+                print(stat, extra[stat], eval(f'self.{stat}'), 'greatInfo')
+
     def progressAnimation(self):
         self.animationFrame += GAMESPEED
-        initialx = self.x
-        initialy = self.y
 
         try:
             self.sprite = self.animation[int(self.animationFrame)]
@@ -215,8 +249,7 @@ class foe:
             self.animationFrame = 0
             self.sprite = self.animation[0]
 
-        self.x = initialx
-        self.y = initialy
+        self.place = IMAGES[self.sprite].get_rect(center=(self.x, self.y))
 
     def actAsBrokenTurret(self, target):
         self.angle += 0.015 * GAMESPEED
@@ -248,6 +281,68 @@ class foe:
         self.place.centerx = self.x
         self.place.centery = self.y
         self.hitbox.getEnds()
+
+    def moveWithPotentialToSwitchRooms(self, rooms):
+        self.moveWithoutWallCollision()
+        roomSwitchDirections = []
+
+        if self.hitbox.left < 0:
+            self.place.right = width
+            self.hitbox.move(width - self.hitbox.right, 0)
+            self.room[0] -= 1
+            roomSwitchDirections += ['left']
+            self.spawnDelay = 250
+
+        elif self.hitbox.right > width:
+            self.place.left = 0
+            self.hitbox.move(-self.hitbox.left, 0)
+            self.room[0] += 1
+            roomSwitchDirections += ['right']
+            self.spawnDelay = 250
+
+        if self.hitbox.top < self.yBoundary:
+            self.place.bottom = height
+            self.hitbox.move(0, height - self.hitbox.bottom)
+            self.room[1] += 1
+            roomSwitchDirections += ['top']
+            self.spawnDelay = 250
+
+        elif self.hitbox.bottom > height:
+            self.place.top = 0
+            self.hitbox.move(0, -self.hitbox.top)
+            self.room[1] -= 1
+            roomSwitchDirections += ['bottom']
+            self.spawnDelay = 250
+
+        self.x = self.place.centerx
+        self.y = self.place.centery
+        self.hitbox.updatePoints()
+
+        if tuple(self.room) not in list(rooms.rooms.keys()):
+            if 'left' in roomSwitchDirections:
+                self.place.left = 0
+                self.hitbox.move(-self.hitbox.left, 0)
+                self.room[0] += 1
+
+            if 'right' in roomSwitchDirections:
+                self.place.right = width
+                self.hitbox.move(width - self.hitbox.right, 0)
+                self.room[0] -= 1
+
+            if 'top' in roomSwitchDirections:
+                self.place.top = 0
+                self.hitbox.move(0, -self.hitbox.top)
+                self.room[1] -= 1
+
+            if 'bottom' in roomSwitchDirections:
+                self.place.bottom = height
+                self.hitbox.move(0, height - self.hitbox.bottom)
+                self.room[1] += 1
+
+            self.hitbox.getEnds()
+            self.x = self.place.centerx
+            self.y = self.place.centery
+            return 1
 
     def moveNormally(self):
         self.moveWithoutWallCollision()
@@ -297,15 +392,15 @@ class foe:
 
     def actAsRobotBodyguard(self, target):
         if self.mode == 'chasing':
-            self.setMovementToTarget(target, 0.7)
+            self.setMovementToTarget(target, 0.9)
             self.moveNormally()
 
         else:
             self.fireCooldown -= GAMESPEED
 
             if self.fireCooldown <= 0:
-                self.basicStraightShot(1.7, 'brokenTurretFireball.png', 26, target)
-                self.fireCooldown = 125
+                self.basicStraightShot(2.1, 'brokenTurretFireball.png', 26, target)
+                self.fireCooldown = 90
 
         self.modeDuration -= GAMESPEED
 
@@ -360,6 +455,7 @@ class foe:
     def actAsDesertCaveJellyfish(self, target):
         self.fireCooldown -= GAMESPEED
         self.momentum -= 0.005 * GAMESPEED
+        self.progressAnimation()
 
         self.hr = math.cos(self.angle) * self.momentum * 2
         self.vr = math.sin(self.angle) * self.momentum * 2
@@ -374,29 +470,31 @@ class foe:
 
     def actAsDesertCaveLargeFly(self, target):
         self.fireCooldown -= GAMESPEED
-        self.moveWithoutWallCollision()
+        self.progressAnimation()
 
         if self.fireCooldown <= 0:
-            self.fireCooldown = 1500
+            self.fireCooldown = 800
 
             if self.summons['top'] is None or self.summons['top'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room, dependentFoes=[self],
-                                        vr=-0.3, initialVr=-0.3))
+                                        vr=-0.3))
                 self.summons['top'] = self.newFoes[-1]
 
             elif self.summons['left'] is None or self.summons['left'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room, dependentFoes=[self],
-                                        hr=-0.3, initialHr=-0.3))
+                                        hr=-0.3))
                 self.summons['left'] = self.newFoes[-1]
 
             elif self.summons['right'] is None or self.summons['right'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room, dependentFoes=[self],
-                                        hr=0.3, initialHr=0.3))
+                                        hr=0.3))
                 self.summons['right'] = self.newFoes[-1]
 
     def actAsDesertCaveSmallFly(self, target):
         self.fireCooldown -= GAMESPEED
         self.currentDuration += GAMESPEED
+        self.progressAnimation()
+        print(self.hr, self.vr, self.currentDuration, 'important')
 
         if self.currentDuration < 200:
             self.moveWithoutWallCollision()
@@ -420,12 +518,31 @@ class foe:
             self.fireCooldown = 1500
 
         elif self.altFireCooldown <= 0:
-            self.basicSpreadShot(7, math.pi * 2 / 3, target, 1.2, 'bouncySplittingProjectileFromWatchdog.png', 40)
+            self.basicSpreadShot(7, math.pi * 2 / 3, target, 1.2, 'bouncySplittingProjectileFromWatchdog.png', 45)
             self.altFireCooldown = 1500
 
         elif self.thirdFireCooldown <= 0:
             self.teleportRandomly(250)
             self.thirdFireCooldown = 1500
+
+    def actAsDesertCaveSpider(self, target):
+        self.fireCooldown -= GAMESPEED
+        self.altFireCooldown -= GAMESPEED
+
+        if self.moveNormally():
+            self.altFireCooldown = 0
+
+        if self.fireCooldown <= 0:
+            self.setMovementNearTarget(target, 2.5, 30)
+            self.fireCooldown = float('inf')
+            self.altFireCooldown = random.randint(25, 175)
+
+        elif self.altFireCooldown <= 0:
+            self.hr = 0
+            self.vr = 0
+            self.basicSpreadShot(3, math.pi / 6, target, 3, 'brokenTurretFireball.png', 60)
+            self.altFireCooldown = float('inf')
+            self.fireCooldown = random.randint(15, 150)
 
     def basicSpreadShot(self, qty, totalAngle, target, speed, sprite, damage):
         indivisualAngle = totalAngle / (qty - 1)
@@ -1093,6 +1210,49 @@ class foe:
                 self.mode = 'chasing'
                 self.modeDuration = random.randint(2000, 4000)
 
+    def actAsGenericWanderingFoe(self, rooms):
+        self.turnCooldownWhileWandering -= GAMESPEED
+
+        try:
+            self.progressAnimation()
+
+        except AttributeError:
+            pass
+
+        if self.turnCooldownWhileWandering <= 0:
+            self.hr = random.randint(-100, 100) / 400
+            self.vr = plusOrMinus(sqrt(1 / 16 - self.hr ** 2))
+            self.turnCooldownWhileWandering = 350
+
+        if self.moveWithPotentialToSwitchRooms(rooms):
+            self.hr = -self.hr
+            self.vr = -self.vr
+
+        if self.room[0] - self.initialRoom[0] > self.maximumDistanceFromHomeWhileWandering:
+            self.hr = -1
+
+        elif self.room[0] - self.initialRoom[0] < -self.maximumDistanceFromHomeWhileWandering:
+            self.hr = 1
+
+        if self.room[1] - self.initialRoom[1] > self.maximumDistanceFromHomeWhileWandering:
+            self.vr = 1
+
+        elif self.room[1] - self.initialRoom[1] < -self.maximumDistanceFromHomeWhileWandering:
+            self.vr = -1
+
+        if self.rotated:
+            self.angle = getRadians(self.hr, -self.vr)
+
+        if self.hasFullHitbox and False:
+            self.place.centerx = self.x
+            self.place.centery = self.y
+
+            if self.rotated:
+                self.hitbox = rect(self.place, -self.angle)
+
+            else:
+                self.hitbox = rect(self.place)
+
     def showHp(self):
         hpGoneRect = pygame.Rect(width * 4 / 5, self.hpBarTop, width * 1 / 6, height / 70)
         hpRect = pygame.Rect(width * 4 / 5, self.hpBarTop, width * 1 / 6 * self.hp / self.initialHp, height / 70)
@@ -1102,6 +1262,15 @@ class foe:
     def actAsFoe(self, target):
         if self.spawnDelay <= 0:
             self.action(target)
+
+            if self.hasFullHitbox:
+                self.hitbox.updatePoints()
+
+                if self.rotated:
+                    self.hitbox = rect(IMAGES[self.sprite].get_rect(center=(self.x, self.y)), -self.angle)
+
+                else:
+                    self.hitbox = rect(IMAGES[self.sprite].get_rect(center=(self.x, self.y)))
 
         else:
             self.spawnDelay -= GAMESPEED
