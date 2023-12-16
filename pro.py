@@ -1,5 +1,7 @@
 import keyboard
 import pygame
+import worldFile
+
 from worldFile import rooms
 from variables import IMAGES, GAMESPEED, display, MOVESPEED, width, height
 from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle, \
@@ -8,6 +10,10 @@ from rects import rect
 from bullets import bullet
 from item import item
 from plainSprites import plainSprite
+from word import word
+
+nanotechBulletImplosionAnimation = [f'nanotechRevolverBulletImpactFrame{i}.png' for i in range(1, 7) for j in
+                                    range(10)]
 
 
 class player:
@@ -88,6 +94,7 @@ class player:
         activeItemNumber = self.inventory.index(self.activeItem)
         self.emptySlots = [i for i in self.inventory[0:30] if i.name == 'empty']
         self.inventory[self.inventory.index(self.emptySlots[0])] = itemGained
+
         if self.inventory.index(itemGained) == activeItemNumber:
             self.activeItem = itemGained
 
@@ -139,6 +146,7 @@ class player:
         if pygame.mouse.get_pressed()[0] and self.fireCooldown <= 0 and not self.sprinting and self.slideTime <= 0:
             try:
                 self.itemFunctions[self.activeItem.name]()
+                return 1
 
             except KeyError:
                 pass
@@ -147,7 +155,7 @@ class player:
         """The useNanotechRevolver function will be your attack while your active item is the nanotechRevolver."""
         path = getPath(6.5, (self.x, self.y), pygame.mouse.get_pos())
         self.bullets.append(bullet(path[0], path[1], 1, 'basicRangeProjectile_d.png', self.x, self.y,
-                                   hasShrunkHitbox=0))
+                                   impactAnimation=nanotechBulletImplosionAnimation))
         self.fireCooldown = 60
 
     def getInput(self):
@@ -233,6 +241,11 @@ class player:
         for thing in self.inventory:
             if thing.name != 'empty':
                 draw(thing)
+                if checkMouseCollision(thing.hitbox) and not thing.dragged:
+                    thing.textBox.draw()
+
+                if thing.qty > 1:
+                    word(thing.hitbox.centerx, thing.hitbox.bottom, str(thing.qty), 'finalNumber').draw()
 
     def showInfo(self):
         display.fill("#1abdbd", self.hpGoneRect)
@@ -299,14 +312,22 @@ class player:
 
     def move(self):
         """The move function makes the player move."""
+        oldX = self.x
+        oldY = self.y
         self.x += self.hr * GAMESPEED * MOVESPEED * self.speed * 0.9
         self.y += self.vr * GAMESPEED * MOVESPEED * self.speed * 0.9
         self.slideTime -= GAMESPEED
-
         self.place.centerx = self.x
         self.place.centery = self.y
         self.updateHitbox()
-        # The next twelve lines of code should make the display's edges act as boundaries.
+
+        for thing in rooms.rooms[tuple(self.room)].environmentObjects:
+            if thing.hitbox.checkCollision(self.hitbox):
+                self.x = oldX
+                self.y = oldY
+                self.place.centerx = self.x
+                self.place.centery = self.y
+                self.updateHitbox()
 
         if self.place.left < rooms.rooms[tuple(self.room)].leftXBoundary:
             if (self.room[0] - 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
@@ -317,7 +338,7 @@ class player:
                     self.room[0] -= 1
                     self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
                     self.bullets = []
-                    self.invincibility = 100
+                    self.invincibility = 200
 
             else:
                 self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
@@ -333,7 +354,7 @@ class player:
                     self.room[0] += 1
                     self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
                     self.bullets = []
-                    self.invincibility = 100
+                    self.invincibility = 200
 
             else:
                 self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
@@ -342,14 +363,14 @@ class player:
 
         if self.place.top < rooms.rooms[tuple(self.room)].yBoundaries:
             if (self.room[0], self.room[1] + 1, self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes != []:
+                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
                     self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
 
                 else:
                     self.place.bottom = height
                     self.room[1] += 1
                     self.bullets = []
-                    self.invincibility = 100
+                    self.invincibility = 200
 
             else:
                 self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
@@ -365,7 +386,7 @@ class player:
                     self.room[1] -= 1
                     self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
                     self.bullets = []
-                    self.invincibility = 100
+                    self.invincibility = 200
 
             else:
                 self.place.bottom = height
@@ -373,6 +394,9 @@ class player:
             self.y = self.place.centery
 
         self.updateHitbox()
+
+        if self.sprinting or self.slideTime > 0:
+            return 1
 
     def foeStats(self):
         print([vars(foe) for foe in rooms.rooms[tuple(self.room)].foes])
@@ -388,6 +412,11 @@ class player:
         except FileNotFoundError:
             pass
 
+    def resetRooms(self):
+        global rooms
+        rooms = worldFile.reset()
+        return rooms
+
     def saveGame(self):
         """The saveGame function should save the player info and the world info."""
         saveWithPickle(f'playerSave{self.file}.pickle', self)
@@ -396,6 +425,6 @@ class player:
         """The actions function will perform all the player's actions."""
         self.getInput()
         self.updateStats()
-        self.move()
         self.progressAnimation()
-        self.useActiveItem()
+        if self.useActiveItem() or self.move():
+            return 1
