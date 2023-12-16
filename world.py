@@ -24,14 +24,15 @@ class world:
 
                      room([0, 1, 10], 'ship', droppedItems=[
                          droppedItem(width / 2, height / 2, 'pistolInInventory.png',
-                                     item('nanotechRevolver', 'pistolInInventory.png'))
+                                     item('nanotechRevolver', 'pistolInInventory.png',
+                                          description='Fires a nanotech bullet'))
                      ], damagingTraps=[damagingTrap('fireTrap2.png', 26, width / 20
                                                     * (1 + 2 * i), height * (2 / 3 - i * 13 / 900)) for
                                        i in range(10)]),
 
                      room([0, -1, 10], 'ship', foes=[
-                         foe('hellhound', width / 2, height / 2, [0, 2, 10],
-                             dependentFoes=[foe('tougherShipMiniboss', width / 2, height / 4, [0, 2, 10])])],
+                         foe('hellhound', width / 2, height / 2, [0, -1, 10],
+                             dependentFoes=[foe('tougherShipMiniboss', width / 2, height / 4, [0, -1, 10])])],
                           damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
                                                       height * 856 / 900) for i in range(32)] + [
                                             damagingTrap('aFire.png', 26, width * 31 / 1600,
@@ -51,7 +52,7 @@ class world:
                          foe('brokenTurret', width / 2, height / 2, [0, 2, 10])]),
 
                      room([0, 3, 10], 'ship', foes=[
-                         foe('flamingRobot', width / 2, height / 3, [0, 2, 10])
+                         foe('flamingRobot', width / 2, height / 3, [0, 3, 10])
                      ], waves=[[
                          foe('brokenTurret', width / 3, height * 2 / 3, [0, 3, 10]),
                          foe('brokenTurret', width * 2 / 3, height * 2 / 3, [0, 3, 10])
@@ -64,19 +65,19 @@ class world:
                                 foe('brokenTurret', width / 2, height / 4, [0, 4, 10])]]),
 
                      room([0, 5, 10], 'ship', foes=[
-                         foe('robotBodyguard', width / 2, height / 2, [0, 4, 10]),
-                         foe('brokenTurret', width / 2, height / 3, [0, 4, 10]),
+                         foe('robotBodyguard', width / 2, height / 2, [0, 5, 10]),
+                         foe('brokenTurret', width / 2, height / 3, [0, 5, 10]),
                      ], damagingTraps=[damagingTrap('fireTrap2.png', 26, width / 20
                                                     * (1 + 2 * i), height * (5 / 8 - i * 13 / 900)) for
                                        i in range(10)],
-                          waves=[[foe('flamingRobot', width / 4, height / 2, [0, 4, 10]),
-                                  foe('flamingRobot', width * 3 / 4, height / 2, [0, 4, 10], ),
-                                  foe('brokenTurret', width / 2, height / 4, [0, 4, 10]),
-                                  foe('brokenTurret', width / 2, height * 3 / 4, [0, 4, 10], )],
-                                 [foe('robotBodyguard', width / 10, height / 4, [0, 4, 10], ),
-                                  foe('robotBodyguard', width / 10, height * .75, [0, 4, 10], ),
-                                  foe('robotBodyguard', width * 9 / 10, height / 5, [0, 4, 10], ),
-                                  foe('robotBodyguard', width * 9 / 10, height * .75, [0, 4, 10], ),
+                          waves=[[foe('flamingRobot', width / 4, height / 2, [0, 5, 10]),
+                                  foe('flamingRobot', width * 3 / 4, height / 2, [0, 5, 10], ),
+                                  foe('brokenTurret', width / 2, height / 4, [0, 5, 10]),
+                                  foe('brokenTurret', width / 2, height * 3 / 4, [0, 5, 10], )],
+                                 [foe('robotBodyguard', width / 10, height / 4, [0, 5, 10], ),
+                                  foe('robotBodyguard', width / 10, height * .75, [0, 5, 10], ),
+                                  foe('robotBodyguard', width * 9 / 10, height / 5, [0, 5, 10], ),
+                                  foe('robotBodyguard', width * 9 / 10, height * .75, [0, 5, 10], ),
                                   ]], teleporters=[teleporter(width / 2, height / 3, 'mineshaftFromShip.bmp',
                                                               [0, 6, -1], destinationXandY=[width / 2,
                                                                                             height * 38 / 39])]),
@@ -142,8 +143,11 @@ class world:
                                         teleporters=[teleporter(0, 0, 'invisiblePixels.png',
                                                                 list(ledgeDestinationCoord),
                                                                 [width / 2, height * 38 / 39],
-                                                                hitbox=teleporterHitbox)])
-        self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert')
+                                                                hitbox=teleporterHitbox)],
+                                        yBoundaries=height * 357 / 512, difficulty=4,
+                                        foes=[foe('desertCaveLargeFly', width * i / 7, height / 4, newRoomCoord) for
+                                                                                            i in range(1, 7)])
+        self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert', locks=0)
         self.desertCaveDepthTwoEntranceCoord = ledgeDestinationCoord
 
     def addMiddleDesertCaveLayerSpecialRooms(self, biome):
@@ -163,7 +167,7 @@ class world:
                                                                 list(ledgeDestinationCoord),
                                                                 [width / 2, height * 38 / 39],
                                                                 hitbox=teleporterHitbox)])
-        self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert')
+        self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert', locks=0)
         self.desertCaveDepthThreeEntranceCoord = ledgeDestinationCoord
 
     def makeRooms(self, qty, biome, rootRoom, difficultyQtys):
@@ -191,7 +195,9 @@ class world:
                 combatRoom = random.choice(calmRooms)
                 combatRoom.addFoes(key)
                 calmRooms.remove(combatRoom)
-                combatRoom.locks = 1
+
+                if key == 5:
+                    combatRoom.locks = 1
 
     def addDoors(self):
         coordinates = list(self.rooms.keys())
