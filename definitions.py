@@ -102,9 +102,16 @@ def checkConditionListItems(items, condition):
     return 0
 
 
-def draw(sprite, rotation=0):
+def draw(sprite, rotation=0, scaling=None):
     """draw(x, y) draws x's sprite rotated y degrees to the display."""
-    display.blit(pygame.transform.rotate(IMAGES[sprite.sprite], rotation), sprite.place)
+
+    if scaling is None:
+        scaledSprite = IMAGES[sprite.sprite]
+
+    else:
+        scaledSprite = pygame.transform.scale(IMAGES[sprite.sprite], scaling)
+
+    display.blit(pygame.transform.rotate(scaledSprite, rotation), sprite.place)
 
 
 def getDirection(x, y):
@@ -140,8 +147,10 @@ def getPath(speed, a, b):
 
 def getPartiallyRandomPath(speed, a, b, angleVariationDegreeInt):
     initialAngle = getDegrees(b[0] - a[0], a[1] - b[1])
-    newAngle = (initialAngle + random.randint(-angleVariationDegreeInt, angleVariationDegreeInt)) * math.pi / 180
+    newAngle = (initialAngle + random.randint(-int(angleVariationDegreeInt * 100),
+                                              int(angleVariationDegreeInt * 100)) / 100) * math.pi / 180
     return [math.cos(newAngle) * speed, math.sin(newAngle) * speed]
+
 
 def saveWithPickle(file, object):
     try:
@@ -161,7 +170,7 @@ def loadWithPickle(file):
 def play(song):
     mixer.init()
     mixer.music.load(f'music/{song}')
-    mixer.music.set_volume(2)
+    mixer.music.set_volume(0)
     mixer.music.play(-1)
 
 
@@ -182,5 +191,10 @@ def drawToFullScreen(sprite):
 def signOrRandom(x):
     return sign(x) if x != 0 else random.choice([-1, 1])
 
-def skip():
+
+def skip(*args):
     pass
+
+
+def plusOrMinus(x):
+    return x if random.randint(0, 1) else -x
