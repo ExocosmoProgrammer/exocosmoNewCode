@@ -17,22 +17,24 @@ import random
 class world:
     def __init__(self, **extra):
         self.desertCaveDepthTwoEntranceCoord = None
-        self.rooms = {(0, 6, -1): room([0, 6, -1], 'desert', background='topDesertCaveEntranceBackground.bmp', locks=0)}
+        self.rooms = {(0, 6, -1): room([0, 6, -1], 'desert',
+                                       background='topDesertCaveEntranceBackground.bmp', locks=0, foes=[], isSafe=1,
+                                       difficulty=-2)}
         self.unavailableCoords = [(0, 5, -1), (-1, 6, -1), (1, 6, -1)]
-        self.potentialCoordinates = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]]
         shipRooms = [room([0, 0, 10], 'ship'),
 
                      room([0, 1, 10], 'ship', droppedItems=[
                          droppedItem(width / 2, height / 2, 'pistolInInventory.png',
                                      item('nanotechRevolver', 'pistolInInventory.png',
-                                          description='Fires a nanotech bullet'))
+                                          description='Fires a nanotech bullet', stackSize=1))
                      ], damagingTraps=[damagingTrap('fireTrap2.png', 26, width / 20
                                                     * (1 + 2 * i), height * (2 / 3 - i * 13 / 900)) for
                                        i in range(10)]),
 
                      room([0, -1, 10], 'ship', foes=[
                          foe('hellhound', width / 2, height / 2, [0, -1, 10],
-                             dependentFoes=[foe('tougherShipMiniboss', width / 2, height / 4, [0, -1, 10])])],
+                             dependentFoes=[foe('tougherShipMiniboss', width / 2, height / 4,
+                                                [0, -1, 10])])],
                           damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
                                                       height * 856 / 900) for i in range(32)] + [
                                             damagingTrap('aFire.png', 26, width * 31 / 1600,
@@ -86,33 +88,42 @@ class world:
                          foe('robotBodyguard', width / 2, height / 2, [0, 6, 10],
                              spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('brokenTurret', width / 2, height / 2, [0, 6, 10])]),
+                                                     foe('brokenTurret', width / 2, height / 2,
+                                                         [0, 6, 10])]),
                                              foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('robotBodyguard', width / 2, height / 2, [0, 6, 10])]),
+                                                     foe('robotBodyguard', width / 2, height / 2,
+                                                         [0, 6, 10])]),
                                              foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('flamingRobot', width / 2, height / 2, [0, 6, 10])])]),
+                                                     foe('flamingRobot', width / 2, height / 2,
+                                                         [0, 6, 10])])]),
                          foe('flamingRobot', width / 2, height / 3, [0, 6, 10],
                              spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('brokenTurret', width / 2, height / 2, [0, 6, 10])]),
+                                                     foe('brokenTurret', width / 2, height / 2,
+                                                         [0, 6, 10])]),
                                              foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('robotBodyguard', width / 2, height / 2, [0, 6, 10])]),
+                                                     foe('robotBodyguard', width / 2, height / 2,
+                                                         [0, 6, 10])]),
                                              foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('flamingRobot', width / 2, height / 2, [0, 6, 10])])]),
+                                                     foe('flamingRobot', width / 2, height / 2,
+                                                         [0, 6, 10])])]),
                          foe('brokenTurret', width / 2, height / 4, [0, 6, 10],
                              spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('brokenTurret', width / 2, height / 2, [0, 6, 10])]),
+                                                     foe('brokenTurret', width / 2, height / 2,
+                                                         [0, 6, 10])]),
                                              foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('robotBodyguard', width / 2, height / 2, [0, 6, 10])]),
+                                                     foe('robotBodyguard', width / 2, height / 2,
+                                                         [0, 6, 10])]),
                                              foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
                                                  spawnsOnDefeat=[
-                                                     foe('flamingRobot', width / 2, height / 2, [0, 6, 10])])])
+                                                     foe('flamingRobot', width / 2, height / 2,
+                                                         [0, 6, 10])])])
                      ]), ]
 
         for place in shipRooms:
@@ -192,12 +203,18 @@ class world:
 
         for key in list(difficultyQtys.keys()):
             for i in range(difficultyQtys[key]):
-                combatRoom = random.choice(calmRooms)
-                combatRoom.addFoes(key)
-                calmRooms.remove(combatRoom)
+                if key > -1:
+                    combatRoom = random.choice(calmRooms)
+                    combatRoom.addFoes(key)
+                    calmRooms.remove(combatRoom)
 
-                if key == 5:
-                    combatRoom.locks = 1
+                    if key == 5:
+                        combatRoom.locks = 1
+
+                else:
+                    roomChanged = random.choice(calmRooms)
+                    calmRooms.remove(roomChanged)
+                    roomChanged.difficulty = key
 
     def addDoors(self):
         coordinates = list(self.rooms.keys())
