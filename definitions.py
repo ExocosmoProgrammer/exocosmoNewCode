@@ -1,13 +1,10 @@
 import math
 import pickle
 import random
-
 import pygame
+
 from pygame import mixer
-from variables import display, IMAGES, LASERS, BACKGROUNDS, width, height
-
-
-fullscreenRect = pygame.Rect(0, 0, width, height)
+from variables import display, IMAGES, LASERS, BACKGROUNDS, width, height, fullscreenRect
 
 
 def sqrt(x):
@@ -46,8 +43,8 @@ def rotate(point, center, angle):
 
 def strIndex(string, character):
     """strIndex(x, y) returns the index of the first usage of character y in text x."""
-    for i in range(len(string)):
-        if string[i] == character:
+    for i in string:
+        if i == character:
             return i
 
 
@@ -64,31 +61,48 @@ def greater(a, b):
 def checkLineCollision(a, b):
     """checkLineCollision(a, b) returns 1 if line object a and line object b collide within their ranges
         and domains, else checkLineCollision(a, b) returns 0."""
+    # If line b is vertical and line a is not, return 1 if the point where both lines intersect is within line b's
+    # range and line a's domain.
+
     if a.slope != None and b.slope == None:
         intersectPoint = (b.constant, a.constant + a.slope * b.constant)
 
-        if a.boundaries[0] <= intersectPoint[0] <= a.boundaries[1] and b.boundaries[0] <= intersectPoint[1] <= b.boundaries[1]:
+        if a.boundaries[0] <= intersectPoint[0] <= a.boundaries[1] and b.boundaries[0] <= intersectPoint[1] \
+                <= b.boundaries[1]:
             return 1
+
+    # If line a is vertical and line b is not, return 1 if the point where both lines intersect is within line b's
+    # range and line a's domain.
 
     elif a.slope == None and b.slope != None:
         intersectPoint = (a.constant, b.constant + b.slope * a.constant)
 
-        if b.boundaries[0] <= intersectPoint[0] <= b.boundaries[1] and a.boundaries[0] <= intersectPoint[1] <= a.boundaries[1]:
+        if b.boundaries[0] <= intersectPoint[0] <= b.boundaries[1] and a.boundaries[0] <= intersectPoint[1] <= \
+                a.boundaries[1]:
             return 1
+
+    # Suppose neither line a nor line b are vertical. Then if their slopes are unequal and the
+    # point where lines a and b intersect is within the domains of both lines, return 1, else if their
+    # slopes are equal and their constants are equal and they share domain, return 1.
 
     elif a.slope != None and b.slope != None:
         try:
             intersectPoint = (b.constant - a.constant) / (a.slope - b.slope)
-            if b.boundaries[0] <= intersectPoint <= b.boundaries[1] and a.boundaries[0] <= intersectPoint <= a.boundaries[1]:
+
+            if b.boundaries[0] <= intersectPoint <= b.boundaries[1] and a.boundaries[0] <= intersectPoint <= \
+                    a.boundaries[1]:
                 return 1
 
         except ZeroDivisionError:
-            if a.constant == b.constant and a.boundaries[1] >= b.boundaries[0] and b.boundaries[1] >= a.boundaries[0]:
+            if a.constant == b.constant and a.boundaries[1] >= b.boundaries[0] and b.boundaries[1] >= \
+                    a.boundaries[0]:
                 return 1
 
-    else:
-        if a.boundaries[1] >= b.boundaries[0] and b.boundaries[1] >= a.boundaries[0] and a.constant == b.constant:
-            return 1
+    # If both lines are vertical, if they have the same x value for their points and share range, return 1.
+
+    elif a.boundaries[1] >= b.boundaries[0] and b.boundaries[1] >= a.boundaries[0] and a.constant == b.constant:
+        return 1
+
     return 0
 
 
@@ -125,8 +139,8 @@ def getDirection(x, y):
 
 
 def getPath(speed, a, b):
-    """getPath(x, y, z) returns a list of the horizontal and vertical movement of a projectile starting
-        with a center at point a and headed towards point b moving y units per frame."""
+    """getPath(x, y, z) returns a list of the horizontal and vertical movement of a projectile that is starting
+        with a center at point y and headed towards point z while moving x units per frame."""
     xdis = b[0] - a[0]
     ydis = b[1] - a[1]
 
@@ -146,6 +160,10 @@ def getPath(speed, a, b):
 
 
 def getPartiallyRandomPath(speed, a, b, angleVariationDegreeInt):
+    """getPath(x, y, z, variation) returns a list of the horizontal and vertical movement of a projectile that
+       is starting with a center at point y and headed at a random angle that is withing variation degrees of the
+        angle that is from point y to point z while moving at x units per frame."""
+
     initialAngle = getDegrees(b[0] - a[0], a[1] - b[1])
     newAngle = (initialAngle + random.randint(-int(angleVariationDegreeInt * 100),
                                               int(angleVariationDegreeInt * 100)) / 100) * math.pi / 180
@@ -153,6 +171,9 @@ def getPartiallyRandomPath(speed, a, b, angleVariationDegreeInt):
 
 
 def saveWithPickle(file, object):
+    """saveWithPickle(x, y) saves object y to file x. saveWithPickle(x) starts by making a file with name x if
+       no file with name x can be accessed."""
+
     try:
         with open(file, 'wb') as saveFile:
             pickle.dump(object, saveFile)
@@ -163,18 +184,21 @@ def saveWithPickle(file, object):
 
 
 def loadWithPickle(file):
+    """loadWithPickle(x) tries to return the object that file x contains."""
+
     with open(file, 'rb') as fileLoaded:
         return pickle.load(fileLoaded)
 
 
-def play(song):
-    mixer.init()
-    mixer.music.load(f'music/{song}')
-    mixer.music.set_volume(0)
-    mixer.music.play(-1)
+# def play(song):
+#     mixer.init()
+#     mixer.music.load(f'music/{song}')
+#     mixer.music.set_volume(0)
+#     mixer.music.play(-1)
 
 
 def checkMouseCollision(unrotatedRectangle):
+    """checkMouseCollision(x) returns 1 if the mouse is over rect x. Otherwise, checkMouseCollision(x) returns 0."""
     unrotatedRectangle.getMajorInfo()
 
     if unrotatedRectangle.left < pygame.mouse.get_pos()[0] < unrotatedRectangle.right \
@@ -185,16 +209,26 @@ def checkMouseCollision(unrotatedRectangle):
 
 
 def drawToFullScreen(sprite):
+    """drawToFullScreen(x) prints image x from the BACKGROUNDS folder to the full screen."""
     display.blit(BACKGROUNDS[sprite], fullscreenRect)
 
 
 def signOrRandom(x):
+    """signOrRandom(x) returns sign(x) if x is not 0. Otherwise, signOrRandom(x) returns a random number from
+       [-1, 1]."""
     return sign(x) if x != 0 else random.choice([-1, 1])
 
 
 def skip(*args):
+    """skip(x) does nothing."""
     pass
 
 
 def plusOrMinus(x):
+    """plusOrMinus(x) randomly returns either x or -x."""
     return x if random.randint(0, 1) else -x
+
+
+def percentChance(x):
+    """percentChance(X) has an x% chance to return true and will otherwise return false."""
+    return True if random.randint(1, 100) <= x else False
