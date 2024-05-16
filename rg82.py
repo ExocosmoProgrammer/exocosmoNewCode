@@ -1,11 +1,15 @@
 import math
+import sys
 import time
 import datetime
 import pygame
 import proFile
 import worldFile
-from definitions import draw, drawToFullScreen, lesser, checkMouseCollision, loadWithPickle, saveWithPickle, play,\
-    greater, sign, pointDistance
+import copy
+
+from definitions import draw, drawToFullScreen, lesser, checkMouseCollision, loadWithPickle, saveWithPickle,\
+    greater, sign, pointDistance, percentChance
+from droppedItem import droppedItem
 import random
 from proFile import pro
 from variables import display, IMAGES, width, height, GAMESPEED, diagonal
@@ -17,12 +21,10 @@ from textBox import textBox
 from temporaryAnimation import temporaryAnimation
 
 enemyBullets = []
-frameTime = 0
-song = 'little_fugue.mp3'
 
 
 def proRoom():
-    """proRoom() returns the room the player is in."""
+    """proRoom() returns the room that the player is in."""
     return rooms.rooms[tuple(pro.room)]
 
 
@@ -64,6 +66,16 @@ def load():
         worldFile.load(file)
         proFile.load(file)
         pro.aggressiveFoes = []
+        pro.hr = 0
+        pro.vr = 0
+
+        for room in rooms.rooms.values():
+            room.getUpdate()
+
+            for enemy in room.foes:
+                enemy.getUpdate()
+
+        pro.getUpdate()
 
     except FileNotFoundError or EOFError:
         rooms = pro.resetRooms()
@@ -78,14 +90,22 @@ def drawGame():
         for door in currentRoom.doors:
             draw(door)
 
+        for sprite in currentRoom.plainSprites:
+            draw(sprite)
+
         for member in currentRoom.teleporters:
             draw(member)
 
         for trap in currentRoom.damagingTraps:
+            trap.progressAnimation()
             draw(trap)
 
         for item in currentRoom.droppedItems:
             draw(item)
+
+        for obj in currentRoom.environmentObjects:
+            if obj.place.bottom <= pro.place.bottom:
+                draw(obj)
 
         draw(pro)
 
@@ -113,6 +133,10 @@ def drawGame():
 
             else:
                 display.blit(IMAGES[projectile.getSpriteWhenDelayed()], projectile.place)
+
+        for obj in currentRoom.environmentObjects:
+            if obj.place.bottom > pro.place.bottom:
+                draw(obj)
 
         for animation in currentRoom.temporaryAnimations:
             draw(animation)
@@ -179,11 +203,11 @@ def foeActions():
                         pass
 
                     axis = random.choice(axisChoices)
-                    enemy.chaseThroughRooms(pro, axis)
+                    enemy.chaseThroughRooms(pro, axis, rooms)
                     rooms.rooms[tuple(enemy.room)].foes.append(enemy)
 
             else:
-                enemy.actAsFoe(pro)
+                enemy.actAsFoe(pro, rooms)
                 enemyBullets += enemy.newBullets
                 currentRoom.foes += enemy.newFoes
                 enemy.newFoes = []
@@ -245,7 +269,6 @@ def checkDamagingCollisionsToPro():
         for foe in currentRoom.foes:
             if foe.spawnDelay <= 0 < foe.damage and foe.hitbox.checkCollision(pro.hitbox):
                 pro.hurt(foe.damage)
-                print(foe.hitbox.points, pro.hitbox.points, 'collision', pro.hp)
 
                 return 1
 
@@ -259,15 +282,18 @@ def checkDroppedItemCollisionsWithPro():
     for droppedItem in currentRoom.droppedItems:
         if droppedItem.hitbox.checkCollision(pro.hitbox):
             try:
-                pro.gainItem(droppedItem.item)
-                currentRoom.droppedItems.remove(droppedItem)
+                droppedItem.item.qty = pro.gainItem(droppedItem.item)
+                print(droppedItem.item.qty)
+
+                if droppedItem.item.qty == 0:
+                    currentRoom.droppedItems.remove(droppedItem)
 
             except IndexError:
                 pass
 
 
 def checkTeleporterCollisionsWithPro():
-    if not currentRoom.foes or True:
+    if not currentRoom.foes:
         for member in currentRoom.teleporters:
             if pro.hitbox.checkCollision(member.hitbox):
                 pro.room = member.destination[:]
@@ -293,7 +319,7 @@ def checkCollisionsToFoes():
     for projectile in pro.bullets:
         if eval(projectile.checksCollisionWhen):
             for foe in currentRoom.foes:
-                if foe.spawnDelay <= 0:
+                if foe.spawnDelay <= 0 and foe.hp > 0:
                     if projectile.hitbox.checkCollision(foe.hitbox):
                         if foe.shieldedBy not in currentRoom.foes:
                             foe.hp -= projectile.damage
@@ -307,16 +333,17 @@ def checkCollisionsToFoes():
                                 currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
                                                                                           projectile.x, projectile.y))
 
-                            break
+                        break
 
 
 def checkCollisionsToEnvironmentObjects():
     for thing in currentRoom.environmentObjects:
         for projectile in pro.bullets + enemyBullets:
             if projectile.hitbox.checkCollision(thing.hitbox):
+                projectile.piercing -= 1
                 thing.hp -= projectile.damage
 
-                if thing.hp <= 0:
+                if thing.hp <= 0 and thing in currentRoom.environmentObjects:
                     currentRoom.environmentObjects.remove(thing)
 
                     try:
@@ -324,6 +351,13 @@ def checkCollisionsToEnvironmentObjects():
 
                     except AttributeError:
                         pass
+
+                if projectile.piercing < 0:
+                    projectile.linger = 0
+
+                    if projectile.impactAnimation is not None:
+                        currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
+                                                                                  projectile.x, projectile.y))
 
 
 def checkCollisions():
@@ -338,11 +372,8 @@ def removeFoes():
     foes are gotten rid of."""
 
     for foe in currentRoom.foes:
-        print(foe.hp, 'hp')
 
         if foe.hp <= 0:
-            print('removed')
-
             while foe in currentRoom.foes:
                 currentRoom.foes.remove(foe)
 
@@ -360,6 +391,10 @@ def removeFoes():
 
                 currentRoom.foes += foe.spawnsOnDefeat
 
+            for thing in foe.loot:
+                if percentChance(thing[1]):
+                    currentRoom.droppedItems.append(droppedItem(foe.x, foe.y, thing[0].sprite, thing[0].item))
+
             if not currentRoom.foes:
                 roomClearingProcedure()
 
@@ -367,33 +402,38 @@ def removeFoes():
 def roomClearingProcedure():
     """roomClearingProcedure() should add more enemies to the player's room or heal the player as is wanted."""
     currentRoom.wave += 1
-    print(currentRoom.foes, pro.aggressiveFoes, 'howcouldiforget')
 
     if currentRoom.locks:
+        print(currentRoom.waves, currentRoom.wave)
+
         try:
-            print(currentRoom.foes, pro.aggressiveFoes, 'howcouldiforgetagain')
             currentRoom.foes = currentRoom.waves[currentRoom.wave].copy()
-            print('thrice', currentRoom.foes)
 
             for foe in currentRoom.foes:
                 foe.spawnDelay = 250
 
         except IndexError:
-            if currentRoom.locks:
-                pro.hp = lesser(130, pro.hp + 40)
-                pro.hpRect = pygame.Rect(0, 3, pro.hp * width / (10 * pro.maxHp), height / 90)
-                currentRoom.foes = []
-                currentRoom.locks = 0
+            pro.hp = lesser(130, pro.hp + 40)
+            pro.hpRect = pygame.Rect(0, 3, pro.hp * width / (10 * pro.maxHp), height / 90)
+            currentRoom.foes = []
 
-                if currentRoom.coordinate == [0, 5, 1]:
-                    pro.startingRoom = [0, 5, 1]
-                    pro.startingCoord = [width / 2, 3 * height / 4]
-                    rooms.rooms[(0, 1, 10)].damagingTraps = []
-                    currentRoom.damagingTraps = []
+            if currentRoom.coordinate == [0, 4, 10]:
+                pro.startingRoom = [0, 4, 10]
+                rooms.rooms[(0, 4, 10)].foesUponRespawn = []
 
-                save()
+            if currentRoom.coordinate == [0, 5, 10]:
+                pro.startingRoom = [0, 5, 10]
+                pro.startingCoord = [width / 2, 3 * height / 4]
+                rooms.rooms[(0, 1, 10)].damagingTraps = []
+                currentRoom.damagingTraps = []
+
+                for i in range(6):
+                    rooms.rooms[(0, i, 10)].foesUponRespawn = []
+
+            save()
 
     else:
+        currentRoom.foesUponRespawn = []
         save()
 
 
@@ -410,8 +450,14 @@ def removeBullets():
             exec(projectile.endEffect)
 
 
+def removeEnvironmentObjects():
+    for obj in currentRoom.environmentObjects:
+        if obj.hp <= 0:
+            currentRoom.environmentObjects.remove(obj)
+
+
 def roomSwitchingProcedure():
-    switchMusic()
+    #switchMusic()
     global currentRoom
     clearBullets()
     currentRoom = proRoom()
@@ -424,29 +470,31 @@ def roomSwitchingProcedure():
             except AttributeError or IndexError:
                 pass
 
+        spot.spawnResourcesFromRoomSwitch()
+
     save()
 
 
-def switchMusic():
-    global song
-    depth = currentRoom.coordinate[2]
-    initialSong = song
-
-    if currentRoom.biome == 'ship':
-        song = 'shelter.mp3'
-
-    elif currentRoom.biome == 'desert':
-        if depth == -1:
-            song = 'fantasyInDMinorByMozart.mp3'
-
-        elif depth == -2:
-            song = 'PreludeNo8Book1.mp3'
-
-        elif depth == -3:
-            song = 'little_fugue.mp3'
-
-    if initialSong != song:
-        play(song)
+# def switchMusic():
+#     global song
+#     depth = currentRoom.coordinate[2]
+#     initialSong = song
+#
+#     if currentRoom.biome == 'ship':
+#         song = 'shelter.mp3'
+#
+#     elif currentRoom.biome == 'desert':
+#         if depth == -1:
+#             song = 'fantasyInDMinorByMozart.mp3'
+#
+#         elif depth == -2:
+#             song = 'PreludeNo8Book1.mp3'
+#
+#         elif depth == -3:
+#             song = 'little_fugue.mp3'
+#
+#     if initialSong != song:
+#         play(song)
 
 
 def runGame():
@@ -472,6 +520,33 @@ def runGame():
         roomSwitchingProcedure()
 
     return datetime.datetime.now() - initialTime
+
+
+def respawn():
+    global enemyBullets
+
+    for room in [room for room in rooms.rooms.values() if room.biome == 'ship']:
+        room.foes = [copy.deepcopy(enemy) for enemy in room.foesUponRespawn]
+        room.wave = -1
+        room.waves = []
+
+        for i in room.wavesUponRespawn.copy():
+            waveAdded = []
+
+            for j in i:
+                waveAdded.append(copy.deepcopy(j))
+
+            room.waves.append(waveAdded)
+
+    pro.room = pro.startingRoom.copy()
+    pro.x = pro.startingCoord[0]
+    pro.y = pro.startingCoord[1]
+    pro.hp = pro.maxHp
+    pro.hurt(1)
+    pro.hp += 1
+    pro.aggressiveFoes = []
+    enemyBullets = []
+    pro.bullets = []
 
 
 startButton = button('startButton.png', width / 2, height / 2)
@@ -512,8 +587,14 @@ while file is None:
 load()
 
 while True:
-    while pro.hp > -float('inf'):
-        time.sleep(greater(0.0336 - runGame().seconds, 0))
+    while pro.hp > -float('0'):
+        try:
+            time.sleep(greater(0.0381 - runGame().seconds, 0))
 
-    while True:
-        pygame.event.pump()
+        except KeyboardInterrupt:
+            pro.hr = 0
+            pro.vr = 0
+            save()
+            sys.exit(0)
+
+    respawn()
