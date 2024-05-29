@@ -2,11 +2,13 @@ from definitions import rotate, lesser, greater, checkLineCollision
 from lines import line
 from variables import display
 import pygame
-# I will use the rect class for collision detection, so that collision can be checked with rotated rectangles.
+# I will use the rect class for collision detection so that collision can be checked with rotated rectangles.
 
 
 class rect:
-    def __init__(self, pyRect=None, angle=0, pointOfRotation=None, **extra):
+    def __init__(self, pyRect=None, angle=0, **extra):
+        """rect objects can be rotated and still accurately check collision."""
+
         if pyRect != None:
             self.points = [[pyRect.left, pyRect.top], [pyRect.right, pyRect.top],
                            [pyRect.right, pyRect.bottom], [pyRect.left, pyRect.bottom]]
@@ -15,30 +17,22 @@ class rect:
             self.updatePoints()
 
             if angle != 0:
-                if pointOfRotation is not None:
-                    for i in range(4):
-                        self.points[i] = rotate(self.points[i], eval(pointOfRotation), angle)
-                else:
-                    for i in range(4):
-                        self.points[i] = rotate(self.points[i], self.center, angle)
+                for i in range(4):
+                    self.points[i] = rotate(self.points[i], self.center, angle)
 
         self.updatePoints()
+        self.lines = []
 
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
 
     def updatePoints(self):
-        self.left = min([point[0] for point in self.points])
-        self.right = max([point[0] for point in self.points])
-        self.bottom = max([point[1] for point in self.points])
-        self.top = min([point[1] for point in self.points])
+        self.getMajorInfo()
         self.center = [(self.left + self.right) / 2, (self.top + self.bottom) / 2]
         self.centerx = self.center[0]
         self.centery = self.center[1]
-        self.width = self.right - self.left
-        self.height = self.bottom - self.top
 
-    def rotate(self, angle=None):
+    def rotate(self, angle):
         self.angle += angle
         for i in range(4):
             self.points[i] = rotate(self.points[i], self.center, angle)
@@ -70,10 +64,7 @@ class rect:
         self.rotate(angle)
 
     def getMajorInfo(self):
-        self.left = min([point[0] for point in self.points])
-        self.right = max([point[0] for point in self.points])
-        self.bottom = max([point[1] for point in self.points])
-        self.top = min([point[1] for point in self.points])
+        self.getEnds()
         self.width = self.right - self.left
         self.height = self.bottom - self.top
 
@@ -100,7 +91,6 @@ class rect:
             self.lines.append(line(slope, constant, boundaries))
 
     def showCollision(self, rectangle):
-
         for i in self.points:
             display.fill((255, 255, 255), pygame.Rect(i[0] - 5, i[1] - 5, 10, 10))
 
@@ -163,8 +153,8 @@ class rect:
                             greater(self.lines[0].YAtX(point[0]), self.lines[2].YAtX(point[0])) \
                             and lesser(self.lines[1].YAtX(point[0]), self.lines[3].YAtX(point[0])) <= point[1] <= \
                             greater(self.lines[1].YAtX(point[0]), self.lines[3].YAtX(point[0])):
-                        self.showCollision(rectangle)
                         return 1
+
             except TypeError:
                 return 1
 
@@ -173,8 +163,8 @@ class rect:
             for rectLine in rectangle.lines:
                 for selfLine in self.lines:
                     if checkLineCollision(selfLine, rectLine):
-                        self.showCollision(rectangle)
                         return 1
+
         else:
             self.getLines()
             rectangle.getLines()
