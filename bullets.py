@@ -8,14 +8,16 @@ import math
 class bullet:
     def __init__(self, hr, vr, damage, sprite, x, y, animation=None,
                  linger=1600, piercing=0, rotation=None, hasRotatedHitbox=1, hasShrunkHitbox = 0,
-                 pointOfRotation=None, dissappearsAtEdges=1, checksCollisionWhen = 'True', endEffect='pass',
-                 causeAndEffect={}, bounces=0, delay=0, delayedSprite='moltenDelaySprite.png', durationBasedPlace=None,
+                 pointOfRotation=None, dissappearsAtEdges=1, checksCollisionWhen='True', endEffect='pass',
+                 causeAndEffect={}, bounces=0, delay=0, delayedSprite='hellhoundFootstep.png', durationBasedPlace=None,
                  durationBasedMovement=None, delayedAnimation=None, consistentPoint='center', updatesPlace=False,
-                 polarDurationBasedPlace=None, polarMovement=None, radius=0, theta=0, impactAnimation=None, **extra):
+                 polarDurationBasedPlace=None, polarMovement=None, radius=0, theta=0, impactAnimation=None,
+                 timeBeforeStop=1600, **extra):
         # hr and vr represent horizontal movement per frame and vertical movement per frame.
         self.hr = hr
         self.vr = vr
         self.damage = damage
+        self.timeBeforeStop = timeBeforeStop
         self.sprite = sprite
         self.dissappearsAtEdges = dissappearsAtEdges
         self.checksCollisionWhen = checksCollisionWhen
@@ -61,7 +63,8 @@ class bullet:
         self.linger = linger
         self.piercing = piercing
         self.animationFrame = 0
-        # If i specify an animation for a bullet, the bullet will cycle through the animation, else the bullet will have a constant sprite.
+        # If i specify an animation for a bullet, the bullet will cycle through the animation, else the
+        # bullet will have a constant sprite.
 
         if animation == None:
             self.animated = 0
@@ -75,6 +78,10 @@ class bullet:
 
     def move(self):
         self.currentDuration += GAMESPEED
+        self.timeBeforeStop -= GAMESPEED
+
+        if self.timeBeforeStop <= 0:
+            self.hr = self.vr = 0
 
         if self.movementByDuration is not None:
             self.hr = eval(self.movementByDuration)[0]
@@ -87,11 +94,14 @@ class bullet:
 
         if self.animated:
             self.animationFrame += GAMESPEED
+            x = self.x
+            y = self.y
 
             if self.animationFrame > len(self.animation) - 1:
                 self.animationFrame = 0
 
             self.sprite = self.animation[int(self.animationFrame)]
+            self.place = pygame.transform.rotate(IMAGES[self.sprite], self.rotation).get_rect(center=[x, y])
 
         if self.placeByDuration is not None:
             self.x = eval(self.placeByDuration)[0]
@@ -133,5 +143,6 @@ class bullet:
             self.x, self.y = self.place.centerx, self.place.centery
 
     def getSpriteWhenDelayed(self):
+        """self.getSpriteWhenDelayed() returns """
         self.delayedSprite = self.delayedAnimation[int((self.initialDelay - self.delay) % len(self.delayedAnimation))]
         return self.delayedAnimation[int((self.initialDelay - self.delay) % len(self.delayedAnimation))]
