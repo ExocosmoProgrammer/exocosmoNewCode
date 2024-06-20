@@ -1,19 +1,15 @@
 import math
 import random
-
-import keyboard
 import pygame
 import worldFile
 import copy
 
-from worldFile import rooms
 from variables import IMAGES, GAMESPEED, display, MOVESPEED, width, height, recipes
 from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle, \
     greater, getRadians
 from rects import rect
 from bullets import bullet
 from item import item
-from plainSprites import plainSprite
 from word import word
 from plainSprites import plainSprite
 
@@ -39,8 +35,9 @@ class player:
         self.x = self.place.centerx
         self.y = self.place.centery
         self.hitbox = rect(pygame.Rect(self.place.left + width / 320, self.place.top + height / 45,
-                                       self.place.width - width / 160,
-                                       self.place.height - height / 45), 0)
+                                       self.place.width - width / 160, self.place.height - height / 45))
+        self.hitboxForObjectCollision = rect(pygame.Rect(self.place.left, self.place.top + height * 16 / 225,
+                                                         height * 4 / 225, self.place.width))
         self.aggressiveFoes = []
 
         self.idleAnimation = {'w': ['newWalkingAnimation_w1.png'],
@@ -83,6 +80,9 @@ class player:
         boxWidth = IMAGES['inventoryBox.png'].get_width()
         boxHeight = IMAGES['inventoryBox.png'].get_height()
         self.emptySlots = []
+        self.maxOxygen = 100
+        self.oxygen = 100
+        self.scaryCooldown = 1
 
         for i in range(3):
             for j in range(10):
@@ -186,7 +186,8 @@ class player:
                     return 1
 
                 except KeyError:
-                    pass
+                    # Replace the next line with pass.
+                    self.destroyFoes()
 
             elif pygame.mouse.get_pressed()[2]:
                 try:
@@ -222,6 +223,10 @@ class player:
             self.bullets.append(bullet(speed * math.cos(angle), speed * math.sin(angle), damage, sprite, self.x,
                                        self.y, animation=animation, impactAnimation=impactAnimation,
                                        timeBeforeStop=timeBeforeStop, piercing=piercing))
+
+    def destroyFoes(self):
+        for i in self.proRoom().foes:
+            i.hp = 0
 
     def useNanotechRevolver(self):
         """The useNanotechRevolver function will be your attack while your active item is the nanotechRevolver."""
@@ -278,6 +283,13 @@ class player:
                 else:
                     self.inventoryShown = 1
                     self.updateItemPositions()
+
+            elif event.key == pygame.K_z and not (self.proRoom().locks and self.proRoom().foes):
+                try:
+                    self.room = self.proRoom().roomThatCanBeManuallyTeleportedTo.coordinate
+
+                except AttributeError:
+                    pass
 
             elif event.key == pygame.K_t:
                 try:
@@ -337,6 +349,17 @@ class player:
         self.stamina = lesser(self.stamina + GAMESPEED, 500)
         self.fireCooldown -= GAMESPEED
         self.invincibility -= GAMESPEED
+        currentRoom = self.proRoom()
+
+        if currentRoom.oxygenLoss:
+            self.oxygen -= currentRoom.oxygenLoss
+
+            if self.oxygen <= 0:
+                self.hp = 0
+
+        else:
+            self.oxygen = self.maxOxygen
+
         self.updateSpeed()
 
     def updateItemPositions(self):
@@ -374,6 +397,13 @@ class player:
         staminaRect = pygame.Rect(0, height / 20, width * self.stamina / 5000,
                                   height / 90)
         display.fill("#1abdbd", staminaRect)
+
+        if self.proRoom().oxygenLoss:
+            oxygenGoneRect = pygame.Rect(width / 100, height / 10, width / 100, height / 10)
+            oxygenRect = pygame.Rect(width / 100, height / 10, width / 100,
+                                     height * self.oxygen / self.maxOxygen / 10)
+            display.fill("#6304b6ff", oxygenGoneRect)
+            display.fill("#06d3ffff", oxygenRect)
 
     def updateInventory(self):
         self.activeItem = self.inventory[self.activeItemSlot]
@@ -511,7 +541,9 @@ class player:
     def updateHitbox(self):
         """Updates the player's hitbox."""
         self.hitbox = rect(pygame.Rect(self.place.left, self.place.top + 20, self.place.width,
-                                       self.place.height - 20), 0)
+                                       self.place.height - height / 80))
+        self.hitboxForObjectCollision = rect(pygame.Rect(self.place.left, self.place.top + height / 15,
+                                                         self.place.width, height * 11 / 450))
 
     def move(self):
         """The move function makes the player move."""
@@ -523,79 +555,72 @@ class player:
         self.place.centerx = self.x
         self.place.centery = self.y
         self.updateHitbox()
+        self.proRoom()
 
-        for thing in rooms.rooms[tuple(self.room)].environmentObjects:
-            if thing.hitbox.checkCollision(self.hitbox):
+        for thing in self.proRoom().environmentObjects:
+            if thing.hitbox.checkCollision(self.hitboxForObjectCollision):
                 self.x = oldX
                 self.y = oldY
                 self.place.centerx = self.x
                 self.place.centery = self.y
                 self.updateHitbox()
 
-            if thing.hitbox.checkCollision(self.hitbox):
+            if thing.hitbox.checkCollision(self.hitboxForObjectCollision):
                 thing.hp = 0
 
-        if self.place.left < rooms.rooms[tuple(self.room)].leftXBoundary:
+        if self.place.left < self.proRoom().leftXBoundary:
             if (self.room[0] - 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                    self.place.left = self.proRoom().leftXBoundary
 
                 else:
                     self.room[0] -= 1
-                    self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
-                    self.bullets = []
-                    self.invincibility = 200
+                    self.place.right = self.proRoom().rightXBoundary
 
             else:
-                self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
+                self.place.left = self.proRoom().leftXBoundary
 
             self.x = self.place.centerx
 
-        elif self.place.right > rooms.rooms[tuple(self.room)].rightXBoundary:
+        elif self.place.right > self.proRoom().rightXBoundary:
             if (self.room[0] + 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                    self.place.right = self.proRoom().rightXBoundary
 
                 else:
                     self.room[0] += 1
-                    self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
-                    self.bullets = []
-                    self.invincibility = 200
+                    self.place.left = self.proRoom().leftXBoundary
 
             else:
-                self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
+                self.place.right = self.proRoom().rightXBoundary
 
             self.x = self.place.centerx
 
-        if self.place.top < rooms.rooms[tuple(self.room)].yBoundaries:
+        if self.place.top < self.proRoom().yBoundaries:
             if (self.room[0], self.room[1] + 1, self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                    self.place.top = self.proRoom().yBoundaries
 
                 else:
-                    self.place.bottom = height
                     self.room[1] += 1
-                    self.bullets = []
-                    self.invincibility = 200
+                    self.place.bottom = self.proRoom().bottomYBoundary
 
             else:
-                self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
+                self.place.top = self.proRoom().yBoundaries
 
             self.y = self.place.centery
 
-        elif self.place.bottom > height:
+        elif self.place.bottom > self.proRoom().bottomYBoundary:
             if (self.room[0], self.room[1] - 1, self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.bottom = height
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                    self.place.bottom = self.proRoom().bottomYBoundary
 
                 else:
                     self.room[1] -= 1
-                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
-                    self.bullets = []
-                    self.invincibility = 200
+                    self.place.top = self.proRoom().yBoundaries
 
             else:
-                self.place.bottom = height
+                self.place.bottom = self.proRoom().bottomYBoundary
 
             self.y = self.place.centery
 
@@ -605,7 +630,7 @@ class player:
             return 1
 
     def foeStats(self):
-        print([vars(foe) for foe in rooms.rooms[tuple(self.room)].foes])
+        print([vars(foe) for foe in self.proRoom().foes])
 
     def loadRooms(self, file):
         """The loadGame function should load the player info and the world info."""
@@ -632,9 +657,14 @@ class player:
         self.getInput()
         self.updateStats()
         self.progressAnimation()
+        returnedValues = []
 
         if self.useActiveItem():
             self.move()
+
+            for foe in [foe for foe in self.proRoom().foes if foe.type == 'scary' and not foe.aggressive]:
+                foe.aggressive = True
+
             return 1
 
         elif self.move():
@@ -642,6 +672,11 @@ class player:
 
     def proRoom(self):
         return rooms.rooms[tuple(self.room)]
+
+    def getRidOfAllFoes(self):
+        for foes in [i.foes for i in rooms.rooms.values()]:
+            for i in foes:
+                i.hp = 0
 
     def getUpdate(self):
         comparison = player()
