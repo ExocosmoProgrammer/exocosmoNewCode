@@ -3,15 +3,15 @@ import copy
 import pygame
 
 from plainSprites import plainSprite
-from droppedItem import droppedItem
 from variables import (width, height, GAMESPEED, environmentObjectsPerBiome, IMAGES, plainSpritesPerBiome,
-                       randomDamagingTrapsPerBiome, notRespawningEnvironmentObjectsPerBiome, playerHeight)
+                       randomDamagingTrapsPerBiome, notRespawningEnvironmentObjectsPerBiome, cells,
+                       environmentObjectLayoutsPerBiome)
 from foe import foe
-from definitions import skip, percentChance, greater, lesser, getYBoundary, getYBoundaryFromPlace
+from definitions import skip, percentChance, greater, lesser, getYBoundaryFromPlace, getYBoundary
 from environmentObject import environmentObject
 from rects import rect
-from damagingTrap import damagingTrap
 from passiveCritter import passiveCritter
+from damagingTrap import damagingTrap
 
 
 class room:
@@ -36,101 +36,129 @@ class room:
         self.environmentObjects = []
         self.temporaryAnimations = []
         self.isSafe = 0
-        self.cells = []
+        self.cells = cells.copy()
         self.plainSprites = []
         self.yBoundaries = 0
+        self.bottomYBoundary = height
         self.cleared = 1
-        self.addsResources = 1
-        self.cells = []
+        self.addsResources = True
         self.passiveCritters = []
+        self.respawnsFoes = False
+        self.usuallyLocks = False
+        self.disconnected = False
+        self.oxygenLoss = 0
+        self.roomThatCanBeManuallyTeleportedTo = None
+        self.environmentObjectsUponRespawn = None
+        self.isBossRoom = False
 
-        if biome == 'desert':
-            if coordinate[2] == 0:
-                self.background = 'earlyMorningOvergroundDesertBackground.bmp'
+        match biome:
+            case 'desert':
+                match coordinate[2]:
+                    case 0:
+                        self.background = 'earlyMorningOvergroundDesertBackground.bmp'
+                        self.standardRoomMaxDifficulty = 0
+                        self.maxResources = 0
+
+                    case -1:
+                        if coordinate == [0, 6, -1]:
+                            self.yBoundaries = height * 543 / 900
+                            self.leftXBoundary = width * 37 / 128
+                            self.rightXBoundary = width * 749 / 1024
+                            self.difficulty = -2
+                            self.standardRoomMaxDifficulty = 0
+                            self.maxResources = 0
+                            self.environmentObjects = []
+                            self.plainSprites = []
+                            self.damagingTraps = []
+                            self.addsResources = 0
+
+                        else:
+                            self.background = 'desertCaveTopLayerNew.bmp'
+                            self.yBoundaries = height * 125 / 900
+                            self.standardRoomMaxDifficulty = random.choice([1, 2, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6])
+                            self.foeDifficulties = {'desertCaveJellyfish': (1, 33), 'desertCaveLargeFly': (1, 33),
+                                                    'desertCaveSpider': (5, 50), 'desertCaveMoth': (3, 50)}
+
+                    case -2:
+                        self.background = 'temporaryDesertCave.bmp'
+                        self.yBoundaries = 0
+                        self.standardRoomMaxDifficulty = random.randint(7, 8)
+                        self.foeDifficulties = {'desertCaveSummoner': (4, 25)}
+
+                    case -3:
+                        self.background = 'temporaryBottomDesertCave.bmp'
+                        self.yBoundaries = 0
+                        self.standardRoomMaxDifficulty = 20
+                        self.foeDifficulties = {'antlionLarva': (1, 50), 'desertCaveSummoner': (4, 25)}
+                        self.spawnCooldown = 100
+
+            case 'ship':
+                self.yBoundaries = 84 * height / 900
+                self.difficulty = 0
                 self.standardRoomMaxDifficulty = 0
                 self.maxResources = 0
+                self.respawnsFoes = True
+                self.usuallyLocks = True
+                self.background = 'shipBackgroundWithDoor.bmp'
 
-            elif coordinate[2] == -1:
-                self.background = 'desertCaveTopLayerNew.bmp'
-                self.yBoundaries = height * 125 / 900
-                self.standardRoomMaxDifficulty = random.choice([1, 2, 3, 3, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6])
-                self.foeDifficulties = {'desertCaveJellyfish': (1, 33), 'desertCaveLargeFly': (1, 33),
-                                        'desertCaveSpider': (5, 50), 'desertCaveMoth': (3, 50)}
-
-            elif coordinate[2] == -2:
-                self.background = 'temporaryDesertCave.bmp'
-                self.yBoundaries = 0
-                self.standardRoomMaxDifficulty = random.randint(7, 8)
-                self.foeDifficulties = {'desertCaveSummoner': (4, 25)}
-
-            elif coordinate[2] == -3:
-                self.background = 'temporaryBottomDesertCave.bmp'
-                self.yBoundaries = 0
-                self.standardRoomMaxDifficulty = 20
-                self.foeDifficulties = {'antlionLarva': (1, 50), 'desertCaveSummoner': (4, 25)}
-                self.spawnCooldown = 100
-
-            elif coordinate == [0, 6, -1]:
-                self.yBoundaries = height * 543 / 900
-                self.leftXBoundary = width * 37 / 128
-                self.rightXBoundary = width * 749 / 1024
+            case 'desertCaveForest':
                 self.difficulty = -2
                 self.standardRoomMaxDifficulty = 0
                 self.maxResources = 0
+                self.background = 'desertCaveForest.bmp'
+                self.yBoundaries = height * 23 / 164
                 self.environmentObjects = []
                 self.plainSprites = []
                 self.damagingTraps = []
-                self.addsResources = 0
+                self.addsResources = False
 
-        elif biome == 'ship':
-            self.yBoundaries = 84 * height / 900
-            self.difficulty = 0
-            self.standardRoomMaxDifficulty = 0
-            self.maxResources = 0
+                for i in range(70):
+                    try:
+                        treeSprite = random.choice([f'desertCaveLumisTree{i}' for i in ['', 'B', 'C', 'D', 'E', 'F',
+                                                                                            'G', 'H']])
+                        pyRect = IMAGES[f'{treeSprite}.png'].get_rect()
+                        rectangle = environmentObject(treeSprite, 0, 0).hitbox
+                        coord = self.getLocationInCell(pyRect, hitbox=rectangle)
+                        self.environmentObjects.append(environmentObject(treeSprite, coord[0], coord[1]))
 
-        elif biome == 'desertCaveForest':
-            self.difficulty = -2
-            self.standardRoomMaxDifficulty = 0
-            self.maxResources = 0
-            self.background = 'desertCaveForest.bmp'
-            self.yBoundaries = height * 23 / 164
-            self.environmentObjects = []
-            self.plainSprites = []
-            self.damagingTraps = []
-            self.getCells()
-            self.addsResources = 0
+                    except (IndexError, KeyError):
+                        pass
 
-            for i in range(70):
-                try:
-                    treeSprite = random.choice([f'desertCaveLumisTree{i}' for i in ['', 'B', 'C', 'D', 'E', 'F',
-                                                                                        'G', 'H']])
-                    pyRect = IMAGES[f'{treeSprite}.png'].get_rect()
-                    rectangle = environmentObject(treeSprite, 0, 0).hitbox
-                    coord = self.getLocationInCell(pyRect, hitbox=rectangle)
-                    self.environmentObjects.append(environmentObject(treeSprite, coord[0], coord[1]))
+                for i in range(70):
+                    try:
+                        coord = self.getLocationInCell(IMAGES['desertCaveLumisFern.png'].get_rect())
+                        self.plainSprites.append(plainSprite('desertCaveLumisFern.png', coord[0], coord[1]))
 
-                except (IndexError, KeyError):
-                    pass
+                    except (KeyError, IndexError):
+                        pass
 
-            for i in range(70):
-                try:
-                    coord = self.getLocationInCell(IMAGES['desertCaveLumisFern.png'].get_rect())
-                    self.plainSprites.append(plainSprite('desertCaveLumisFern.png', coord[0], coord[1]))
+                for i in range(random.randint(0, 5)):
+                    critter = random.choice(['desertCaveSlug', 'desertCaveButterfly', 'desertCaveAmphipod',
+                                             'desertCaveCritterWithThreeLegs'])
+                    critterRect = passiveCritter(critter, 0, 0, self).hitbox
+                    self.passiveCritters.append(passiveCritter(critter,
+                                                               random.randint(int(critterRect.width / 2),
+                                                                              int(width - critterRect.width / 2)),
+                                                               random.randint(int(critterRect.height / 2),
+                                                                              int(height - critterRect.height / 2)),
+                                                               self))
+            case 'desertCaveLumisLake':
+                self.yBoundaries = height * 0.17
+                self.maxResources = 0
+                self.standardRoomMaxDifficulty = 0
+                self.foesUponRespawn = []
 
-                except (KeyError, IndexError):
-                    pass
+                match self.coordinate[2]:
+                    case -1:
+                        self.background = 'desertCaveLumisLake.bmp'
+                        self.oxygenLoss = 0.02
+                        self.locks = True
+                        self.usuallyLocks = True
+                        self.respawnsFoes = True
 
-            for i in range(random.randint(0, 5)):
-                critter = random.choice(['desertCaveSlug', 'desertCaveButterfly', 'desertCaveAmphipod',
-                                         'desertCaveCritterWithThreeLegs'])
-                critterRect = passiveCritter(critter, 0, 0, self).hitbox
-                self.passiveCritters.append(passiveCritter(critter,
-                                                           random.randint(int(critterRect.width / 2),
-                                                                          int(width - critterRect.width / 2)),
-                                                           random.randint(int(critterRect.height / 2),
-                                                                          int(height - critterRect.height / 2)), self))
-
-        self.getCells()
+                    case 9:
+                        self.background = 'desertCaveLumisLakeSurfaceRoom.bmp'
+                        self.disconnected = True
 
         try:
             self.action = roomActions[(self.biome, self.coordinate[2])]
@@ -179,27 +207,24 @@ class room:
         except KeyError:
             self.availableResources = None
 
-        self.foesUponRespawn = [copy.copy(enemy) for enemy in self.foes]
-
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
 
-        if self.biome == 'ship':
-            self.background = 'shipBackgroundWithDoor.bmp'
-
-            for foe in self.foes:
-                foe.yBoundary = (165 - foe.place.height) * height / 900
-
-            for wave in self.waves:
-                for foe in wave:
-                    foe.yBoundary = (165 - foe.place.height) * height / 900
-
         for enemy in self.foes:
-            enemy.yBoundary = self.yBoundaries
+            enemy.yBoundary = getYBoundary(enemy, self.yBoundaries)
+            enemy.bottomYBoundary = self.bottomYBoundary
+            enemy.leftXBoundary = self.leftXBoundary
+            enemy.rightXBoundary = self.rightXBoundary
 
         self.wavesUponRespawn = []
 
         for i in self.waves.copy():
+            for enemy in i:
+                enemy.yBoundary = getYBoundary(enemy, self.yBoundaries)
+                enemy.bottomYBoundary = self.bottomYBoundary
+                enemy.leftXBoundary = self.leftXBoundary
+                enemy.rightXBoundary = self.rightXBoundary
+
             waveAdded = []
 
             for j in i:
@@ -207,6 +232,10 @@ class room:
 
             self.wavesUponRespawn.append(waveAdded)
 
+        if not hasattr(self, 'foesUponRespawn'):
+            self.getFoesUponRespawn()
+
+    def getFoesUponRespawn(self):
         self.foesUponRespawn = [copy.deepcopy(enemy) for enemy in self.foes]
 
     def addFoes(self, difficulty):
@@ -246,13 +275,10 @@ class room:
                                       self.coordinate)]
 
         for enemy in self.foes:
-            enemy.yBoundary = self.yBoundaries
-
-    def getCells(self):
-        for i in range(20):
-            for j in range(20):
-                self.cells.append([width * i / 20, width * (i + 1) / 20, height * j / 20,
-                                   height * (j + 1) / 20])
+            enemy.yBoundary = getYBoundary(enemy, self.yBoundaries)
+            enemy.bottomYBoundary = self.bottomYBoundary
+            enemy.leftXBoundary = self.leftXBoundary
+            enemy.rightXBoundary = self.rightXBoundary
 
     def spawnFoesFromRoomSwitch(self):
         currentCumulativeDifficulty = 0
@@ -272,7 +298,10 @@ class room:
                                      self.coordinate))
 
         for enemy in self.foes:
-            enemy.yBoundary = self.yBoundaries
+            enemy.yBoundary = getYBoundary(enemy, self.yBoundaries)
+            enemy.bottomYBoundary = self.bottomYBoundary
+            enemy.leftXBoundary = self.leftXBoundary
+            enemy.rightXBoundary = self.rightXBoundary
 
     def getUnavailableCells(self, place, hitbox):
         unavailableCells = []
@@ -287,9 +316,16 @@ class room:
                     unavailableCells.append(cell)
                     break
 
-            if cell[2] <= yBoundary:
+            if cell[2] < yBoundary:
                 if cell[3] > yBoundary:
                     cell[2] = yBoundary
+
+                else:
+                    unavailableCells.append(cell)
+
+            if cell[3] > self.bottomYBoundary:
+                if cell[2] < self.bottomYBoundary:
+                    cell[3] = self.bottomYBoundary
 
                 else:
                     unavailableCells.append(cell)
@@ -357,6 +393,10 @@ class room:
 
         except (IndexError, KeyError):
             pass
+
+    def assignEnvironmentObjectsFromListOfLayouts(self):
+        self.environmentObjects = eval(random.choice(environmentObjectLayoutsPerBiome[(self.biome,
+                                                                                       self.coordinate[2])]))
 
     def actAsDesertCaveDepthThreeRoom(self):
         self.spawnCooldown -= GAMESPEED
