@@ -4,7 +4,7 @@ import random
 import pygame
 
 from pygame import mixer
-from variables import display, IMAGES, LASERS, BACKGROUNDS, width, height, fullscreenRect, playerHeight
+from variables import display, IMAGES, LASERS, BACKGROUNDS, width, height, fullscreenRect, playerHeight, getProperPath
 
 
 def sqrt(x):
@@ -20,7 +20,7 @@ def sign(x):
 def getRadians(x, y):
     """getRadians(x, y) returns the angle, in radians, from -π to π, made by the x-axis right of the origin and
         a line from the origin to point(x, y)."""
-    return -math.acos(x / sqrt(x ** 2 + y ** 2)) * sign(y)
+    return 0 if x == y == 0 else -math.acos(x / sqrt(x ** 2 + y ** 2)) * sign(y)
 
 
 def getDegrees(x, y):
@@ -173,6 +173,7 @@ def getPartiallyRandomPath(speed, a, b, angleVariationDegreeInt):
 def saveWithPickle(file, object):
     """saveWithPickle(x, y) saves object y to file x. saveWithPickle(x) starts by making a file with name x if
        no file with name x can be accessed."""
+    file = getProperPath(file)
 
     try:
         with open(file, 'wb') as saveFile:
@@ -186,7 +187,7 @@ def saveWithPickle(file, object):
 def loadWithPickle(file):
     """loadWithPickle(x) tries to return the object that file x contains."""
 
-    with open(file, 'rb') as fileLoaded:
+    with open(getProperPath(file), 'rb') as fileLoaded:
         return pickle.load(fileLoaded)
 
 
