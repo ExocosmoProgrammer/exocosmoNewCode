@@ -3,30 +3,99 @@ import sys
 import time
 import datetime
 import pygame
-import proFile
-import worldFile
 import copy
 
 from definitions import draw, drawToFullScreen, lesser, checkMouseCollision, loadWithPickle, saveWithPickle,\
-    greater, sign, pointDistance, percentChance
+    greater, sign, pointDistance, percentChance, getPath, getDegrees, sqrt
 from droppedItem import droppedItem
 import random
-from proFile import pro
 from variables import display, IMAGES, width, height, GAMESPEED, diagonal
 from button import button
-from bullets import bullet
-from worldFile import rooms
-from word import word
-from textBox import textBox
+from pro import player
 from temporaryAnimation import temporaryAnimation
-from plainSprites import plainSprite
+from bullets import bullet
+from foe import foe
 
 enemyBullets = []
+pro = player()
+startButton = button('whiteStartButton.png', width * 41 / 50, height * 7 / 12,
+                     spriteWhenTouchingMouse='redStartButton.png')
+exitButton = button('whiteExitButton.png', width * 41 / 50, height * 17 / 24,
+                    spriteWhenTouchingMouse='redExitButton.png')
+save1Button = button('whiteSave1Button.png', width * 41 / 50, height * 9 / 16,
+                     spriteWhenTouchingMouse='redSave1Button.png')
+save2Button = button('whiteSave2Button.png', width * 41 / 50, height * 11 / 16,
+                     spriteWhenTouchingMouse='redSave2Button.png')
+save3Button = button('whiteSave3Button.png', width * 41 / 50, height * 13 / 16,
+                     spriteWhenTouchingMouse='redSave3Button.png')
+menu = 'title'
+
+file = None
+
+while file is None:
+    drawToFullScreen('exocosmoNewTitleScreen.bmp')
+
+    if menu == 'title':
+        startButton.draw()
+        exitButton.draw()
+
+        if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
+
+            if checkMouseCollision(startButton.hitbox):
+                menu = 'saveSelection'
+
+            elif checkMouseCollision(exitButton.hitbox):
+                assert False
+
+    elif menu == 'saveSelection':
+        for i in range(1, 4):
+            exec(f'save{i}Button.draw()')
+
+        if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
+            for i in range(1, 4):
+                exec(f"if checkMouseCollision(save{i}Button.hitbox): file = {i}")
+
+    pygame.event.pump()
+    pygame.display.flip()
+
+
+def load():
+    """load() should load the player's saved data."""
+    global pro, rooms
+
+    try:
+        newRooms = pro.loadRooms(file)
+
+        if newRooms is not None:
+            rooms = newRooms
+
+        pro = loadWithPickle(f'playerSave{file}.pickle')
+        pro.aggressiveFoes = []
+        pro.hr = 0
+        pro.vr = 0
+
+        for room in rooms.rooms.values():
+            room.getUpdate()
+
+            for enemy in room.foes:
+                enemy.getUpdate()
+
+        pro.getUpdate()
+
+    except FileNotFoundError or EOFError:
+        rooms = pro.resetRooms()
+        pro = player()
+
+
+load()
 
 
 def proRoom():
     """proRoom() returns the room that the player is in."""
     return rooms.rooms[tuple(pro.room)]
+
+
+currentRoom = proRoom()
 
 
 def getNearbyFoes():
@@ -43,44 +112,11 @@ def getNearbyFoes():
     return foes
 
 
-currentRoom = proRoom()
-
-
 def save():
     """save() should save the game."""
     if True:
         saveWithPickle(f'playerSave{file}.pickle', pro)
         saveWithPickle(f'worldSave{file}.pickle', rooms)
-
-
-def load():
-    """load() should load the player's saved data."""
-    global pro, rooms
-
-    try:
-        newRooms = pro.loadRooms(file)
-
-        if newRooms is not None:
-            rooms = newRooms
-
-        pro = loadWithPickle(f'playerSave{file}.pickle')
-        worldFile.load(file)
-        proFile.load(file)
-        pro.aggressiveFoes = []
-        pro.hr = 0
-        pro.vr = 0
-
-        for room in rooms.rooms.values():
-            room.getUpdate()
-
-            for enemy in room.foes:
-                enemy.getUpdate()
-
-        pro.getUpdate()
-
-    except FileNotFoundError or EOFError:
-        rooms = pro.resetRooms()
-        pro = proFile.reset()
 
 
 def drawGame():
@@ -95,6 +131,7 @@ def drawGame():
             draw(sprite)
 
         for member in currentRoom.teleporters:
+            member.functionToGetSprite(pro, currentRoom.locks and currentRoom.foes)
             draw(member)
 
         for trap in currentRoom.damagingTraps:
@@ -122,6 +159,15 @@ def drawGame():
                     draw(enemy)
 
             else:
+                if hasattr(enemy, 'delayAnimation'):
+                    enemy.delayFrame += GAMESPEED
+
+                    if int(enemy.delayFrame) > len(enemy.delayAnimation) - 1:
+                        enemy.delayFrame = 0
+
+                    enemy.delaySprite = enemy.delayAnimation[enemy.delayFrame]
+                    enemy.place = IMAGES[enemy.delaySprite].get_rect(center=(enemy.x, enemy.y))
+
                 display.blit(IMAGES[enemy.delaySprite], enemy.place)
 
         for projectile in pro.bullets:
@@ -167,17 +213,10 @@ def foeActions():
     """foeActions() should make foes act."""
     global enemyBullets
 
-    for enemy in getNearbyFoes():
+    for enemy in currentRoom.foes:
         if enemy not in pro.aggressiveFoes:
             if enemy.spawnDelay <= 0:
-                try:
-                    rooms.rooms[tuple(enemy.room)].foes.remove(enemy)
-
-                except ValueError:
-                    pass
-
                 enemy.wanderingMethod(rooms)
-                rooms.rooms[tuple(enemy.room)].foes.append(enemy)
 
                 if pointDistance((enemy.x, enemy.y), (pro.x, pro.y)) <= \
                         enemy.aggressionRadius * diagonal / 1836 and enemy in currentRoom.foes:
@@ -185,7 +224,6 @@ def foeActions():
 
                     if enemy.locksRoomOnAggression:
                         proRoom().locks = True
-
 
             else:
                 enemy.spawnDelay -= GAMESPEED
@@ -215,7 +253,7 @@ def foeActions():
                     rooms.rooms[tuple(enemy.room)].foes.append(enemy)
 
             else:
-                enemy.actAsFoe(pro, rooms)
+                enemy.actAsFoe(pro, rooms, currentRoom)
                 enemyBullets += enemy.newBullets
                 currentRoom.foes += enemy.newFoes
                 enemy.newFoes = []
@@ -269,6 +307,7 @@ def checkDamagingCollisionsToPro():
                     projectile.hitbox.checkCollision(pro.hitbox):
                 pro.hurt(projectile.damage)
                 projectile.piercing -= 1
+                exec(projectile.playerContactEffect)
 
                 if projectile.piercing < 0:
                     projectile.linger = 0
@@ -446,6 +485,9 @@ def roomClearingProcedure():
         currentRoom.foesUponRespawn = []
         save()
 
+    if currentRoom.isBossRoom and not currentRoom.foes:
+        currentRoom.respawnsFoes = False
+
 
 def removeBullets():
     """removeBullets() should get rid of projectiles as appropriate."""
@@ -466,11 +508,25 @@ def removeEnvironmentObjects():
             currentRoom.environmentObjects.remove(obj)
 
 
+def handleScaryCooldownAndSpawningScary():
+    global currentRoom
+
+    if currentRoom.background == 'desertCaveLumisLake.bmp':
+        pro.scaryCooldown -= 1
+
+    if pro.scaryCooldown <= 0:
+        currentRoom.foes.append(foe('scary', width / 2, height / 2, currentRoom.coordinate, spawnDelay=770))
+        pro.scaryCooldown = 2
+
+
 def roomSwitchingProcedure():
     #switchMusic()
     global currentRoom
     clearBullets()
     currentRoom = proRoom()
+    pro.bullets = []
+    pro.invincibility = 200
+    handleScaryCooldownAndSpawningScary()
 
     for spot in rooms.rooms.values():
         if spot.difficulty == -1:
@@ -514,6 +570,8 @@ def runGame():
     drawGame()
 
     if pro.actions():
+        # TODO make this block's work be done in pro.py.
+
         for enemy in proRoom().foes:
             if enemy not in pro.aggressiveFoes:
                 pro.aggressiveFoes.append(enemy)
@@ -539,66 +597,38 @@ def runGame():
 def respawn():
     global enemyBullets
 
-    for room in [room for room in rooms.rooms.values() if room.biome == 'ship']:
-        room.foes = [copy.deepcopy(enemy) for enemy in room.foesUponRespawn]
-        room.wave = -1
-        room.waves = []
+    for room in rooms.rooms.values():
+        if room.environmentObjectsUponRespawn is not None:
+            room.environmentObjects = room.environmentObjectsUponRespawn.copy()
 
-        for i in room.wavesUponRespawn.copy():
-            waveAdded = []
+        if room.respawnsFoes:
+            room.foes = [copy.deepcopy(enemy) for enemy in room.foesUponRespawn]
+            room.wave = -1
+            room.waves = []
 
-            for j in i:
-                waveAdded.append(copy.deepcopy(j))
+            for i in room.wavesUponRespawn.copy():
+                waveAdded = []
 
-            room.waves.append(waveAdded)
+                for j in i:
+                    waveAdded.append(copy.deepcopy(j))
+
+                room.waves.append(waveAdded)
+
+        for enemy in room.foes:
+            enemy.hp = enemy.initialHp
+
+        room.locks = room.usuallyLocks
 
     pro.room = pro.startingRoom.copy()
     pro.x = pro.startingCoord[0]
     pro.y = pro.startingCoord[1]
-    pro.hp = pro.maxHp
+    pro.hp = pro.maxHp + 1
     pro.hurt(1)
     pro.hp += 1
     pro.aggressiveFoes = []
     enemyBullets = []
     pro.bullets = []
 
-
-startButton = button('startButton.png', width / 2, height / 2)
-exitButton = button('exitButton.png', width / 2, height * 2 / 3)
-save1Button = button('save1Button.png', width / 2, height / 2)
-save2Button = button('save2Button.png', width / 2, height * 5 / 8)
-save3Button = button('save3Button.png', width / 2, height * 3 / 4)
-backButton = button('backButton.png', width / 2, height * 7 / 8)
-menu = 'title'
-file = None
-
-while file is None:
-    drawToFullScreen('exocosmoNewTitleScreen.bmp')
-
-    if menu == 'title':
-        draw(startButton)
-        draw(exitButton)
-
-        if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
-
-            if checkMouseCollision(startButton.hitbox):
-                menu = 'saveSelection'
-
-            elif checkMouseCollision(exitButton.hitbox):
-                assert False
-
-    elif menu == 'saveSelection':
-        for i in range(1, 4):
-            exec(f'draw(save{i}Button)')
-
-        if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
-            for i in range(1, 4):
-                exec(f"if checkMouseCollision(save{i}Button.hitbox): file = {i}")
-
-    pygame.event.pump()
-    pygame.display.flip()
-
-load()
 
 while True:
     while pro.hp > -float('0'):
