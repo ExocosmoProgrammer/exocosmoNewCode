@@ -1,6 +1,6 @@
 from variables import MOVESPEED, IMAGES, GAMESPEED, width, height
 from rects import rect
-from definitions import getDirection, lesser, greater, getYBoundary, sign
+from definitions import getDirection, lesser, greater, getYBoundary, sign, sqrt
 
 import random
 import pygame
@@ -133,8 +133,8 @@ class passiveCritter:
             self.updateHitboxAndPlaceNormally()
             collision = False
 
-            if 0 <= self.hitbox.left and self.hitbox.right <= width and self.hitbox.top >= self.yBoundaries \
-                    and self.hitbox.bottom <= height:
+            if self.room.leftXBoundary <= self.hitbox.left and self.hitbox.right <= self.room.rightXBoundary and \
+                    self.hitbox.top >= self.yBoundaries and self.hitbox.bottom <= self.room.bottomYBoundary:
                 for i in self.room.environmentObjects:
                     if i.hitbox.checkCollision(self.hitbox):
                         collision = True
@@ -205,10 +205,10 @@ class passiveCritter:
             leftBounds = True
             self.updateHitboxAndPlaceNormally()
 
-        if self.hitbox.bottom > height:
+        if self.hitbox.bottom > self.room.bottomYBoundary:
             self.vr = -1
             self.faceProperly()
-            self.y -= self.hitbox.bottom - height
+            self.y -= self.hitbox.bottom - self.room.bottomYBoundary
             leftBounds = True
             self.updateHitboxAndPlaceNormally()
 
@@ -244,19 +244,19 @@ class passiveCritter:
 
             else:
                 if self.hitbox.centery > objectHit.hitbox.centery:
-                    self.vr = 1
+                    self.vr = sqrt(2) / 2
                     self.y -= self.hitbox.top - objectHit.hitbox.bottom + 1
 
                 else:
-                    self.vr = -1
+                    self.vr = -sqrt(2) / 2
                     self.y -= self.hitbox.bottom - objectHit.hitbox.top - 1
 
                 if self.hitbox.centerx > objectHit.hitbox.centerx:
-                    self.hr = 1
+                    self.hr = sqrt(2) / 2
                     self.x -= self.hitbox.left - objectHit.hitbox.right - 1
 
                 else:
-                    self.hr = -1
+                    self.hr = -sqrt(2) / 2
                     self.x -= self.hitbox.right - objectHit.hitbox.right + 1
 
             self.updateHitboxAndPlaceNormally()
@@ -275,7 +275,7 @@ class passiveCritter:
                     self.updateHitboxAndPlaceNormally()
 
                     if 0 <= self.hitbox.left and self.hitbox.right <= width and self.hitbox.top >= self.yBoundaries \
-                            and self.hitbox.bottom <= height:
+                            and self.hitbox.bottom <= self.room.bottomYBoundary:
                         for i in self.room.environmentObjects:
                             if i.hitbox.checkCollision(self.hitbox):
                                 tryAgain = True
