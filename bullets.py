@@ -12,7 +12,7 @@ class bullet:
                  causeAndEffect={}, bounces=0, delay=0, delayedSprite='hellhoundFootstep.png', durationBasedPlace=None,
                  durationBasedMovement=None, delayedAnimation=None, consistentPoint='center', updatesPlace=False,
                  polarDurationBasedPlace=None, polarMovement=None, radius=0, theta=0, impactAnimation=None,
-                 timeBeforeStop=1600, **extra):
+                 timeBeforeStop=1600, playerContactEffect = 'pass', **extra):
         # hr and vr represent horizontal movement per frame and vertical movement per frame.
         self.hr = hr
         self.vr = vr
@@ -23,7 +23,8 @@ class bullet:
         self.checksCollisionWhen = checksCollisionWhen
         self.impactAnimation = impactAnimation
         self.endEffect = endEffect
-        self.conditionalEffects = causeAndEffect
+        self.playerContactEffect = playerContactEffect
+        self.conditionalEffects = causeAndEffect.copy()
         self.bounces = bounces
         self.delay = delay
         self.delayedSprite = delayedSprite
@@ -63,7 +64,7 @@ class bullet:
         self.linger = linger
         self.piercing = piercing
         self.animationFrame = 0
-        # If i specify an animation for a bullet, the bullet will cycle through the animation, else the
+        # If I specify an animation for a bullet, the bullet will cycle through the animation, else the
         # bullet will have a constant sprite.
 
         if animation == None:
@@ -145,4 +146,4 @@ class bullet:
     def getSpriteWhenDelayed(self):
         """self.getSpriteWhenDelayed() returns """
         self.delayedSprite = self.delayedAnimation[int((self.initialDelay - self.delay) % len(self.delayedAnimation))]
-        return self.delayedAnimation[int((self.initialDelay - self.delay) % len(self.delayedAnimation))]
+        return self.delayedSprite
