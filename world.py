@@ -9,7 +9,6 @@ from foe import foe
 from droppedItem import droppedItem
 from item import item
 from damagingTrap import damagingTrap
-from definitions import saveWithPickle, loadWithPickle
 from teleporter import teleporter
 from rects import rect
 
@@ -50,7 +49,7 @@ class world:
                                            ] + [
                                             damagingTrap('aFire.png', 26, width * i / 31,
                                                          height * 44 / 900 + yBoundaryShip) for i in range(19, 31)
-                                        ]),
+                                        ], isBossRoom=True),
 
                      room([0, 2, 10], 'ship', foes=[
                          foe('brokenTurret', width / 2, height / 2, [0, 2, 10])]),
@@ -82,9 +81,12 @@ class world:
                                   foe('robotBodyguard', width / 10, height * .75, [0, 5, 10], ),
                                   foe('robotBodyguard', width * 9 / 10, height / 5, [0, 5, 10], ),
                                   foe('robotBodyguard', width * 9 / 10, height * .75, [0, 5, 10], ),
-                                  ]], teleporters=[teleporter(width / 2, height / 3, 'mineshaftFromShip.bmp',
+                                  ]], teleporters=[teleporter(width / 2, height / 3, 'doorToDesertCaves1.png',
                                                               [0, 6, -1], destinationXandY=[width / 2,
-                                                                                            height * 38 / 39])]),
+                                                                                            height * 38 / 39],
+                                                              animationWhenApproached=[f'doorToDesertCaves{i}.png' for \
+                                                                                       i in [2, 3] for j in \
+                                                                                       range(90)])]),
 
                      room([0, 6, 10], 'ship', foes=[
                          foe('robotBodyguard', width / 2, height / 2, [0, 6, 10],
@@ -140,6 +142,14 @@ class world:
 
         return [space for space in adjSpaces if space not in self.rooms.keys() and space not in self.unavailableCoords]
 
+    def connectsToBiome(self, coord, biome):
+        for i in [[coord[0], coord[1] + 1], [coord[0], coord[1] - 1],
+                     [coord[0] + 1, coord[1]], [coord[0] - 1, coord[1]]]:
+            if i in [j.coordinate[:2] for j in biome]:
+                return 1
+
+        return 0
+
     def addTopDesertCaveLayerSpecialRooms(self, biome):
         yCoords = [member.coordinate[1] for member in biome]
         choices = [member for member in biome if member.coordinate[1] == max(yCoords)]
@@ -160,12 +170,17 @@ class world:
                                         yBoundaries=height * 357 / 512, difficulty=4,
                                         foes=[foe('desertCaveLargeFly', width * i / 7, height / 4,
                                                   newRoomCoord) for i in range(1, 7)])
+        biome.append(self.rooms[newRoomCoord])
         self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert', locks=False)
         self.desertCaveDepthTwoEntranceCoord = ledgeDestinationCoord
         roomWithMiniboss = random.choice([place for place in biome if place.difficulty == -1])
-        self.rooms[tuple(roomWithMiniboss.coordinate)].foes = [foe('desertCaveFlyMiniboss', width / 2,
+        roomWithMiniboss.foes = [foe('desertCaveFlyMiniboss', width / 2,
                                                                     height / 2, roomWithMiniboss.coordinate)]
-        self.rooms[tuple(roomWithMiniboss.coordinate)].difficulty = 0
+        roomWithMiniboss.getFoesUponRespawn()
+        roomWithMiniboss.usesFoesUponRespawn = True
+        roomWithMiniboss.difficulty = 0
+        roomWithMiniboss.respawnsFoes = True
+        roomWithMiniboss.isBossRoom = True
         random.shuffle(biome)
 
         for i in [i for i in biome if i.difficulty <= -1]:
@@ -174,7 +189,43 @@ class world:
                 break
 
         self.rooms[tuple(initialForestRoom)] = room(initialForestRoom, 'desertCaveForest')
-        self.makeRooms(25, 'desertCaveForest', initialForestRoom, {})
+        biome += self.makeRooms(25, 'desertCaveForest', initialForestRoom, {})
+        lumisLakeCoordinates = self.whereCanSquareOfRoomsFitInEmptyArea(13, biome)
+        topLumisLakeYCoord = max([i[1] for i in lumisLakeCoordinates])
+        bottomLumisLakeYCoord = min([i[1] for i in lumisLakeCoordinates])
+        rightLumisLakeXCoord = max([i[0] for i in lumisLakeCoordinates])
+        leftLumisLakeXCoord = min([i[0] for i in lumisLakeCoordinates])
+
+        for coord in lumisLakeCoordinates:
+            self.rooms[coord] = room(coord, 'desertCaveLumisLake')
+
+            if coord[1] == topLumisLakeYCoord:
+                self.rooms[coord].background = 'topmostLumisLake.bmp'
+                self.rooms[coord].bottomYBoundary = height * 0.45
+                self.rooms[coord].oxygenLoss = 0
+
+            elif coord[1] == bottomLumisLakeYCoord:
+                self.rooms[coord].background = 'bottommostLumisLake.bmp'
+                self.rooms[coord].yBoundaries = height * 0.55
+                self.rooms[coord].oxygenLoss = 0
+
+            elif coord[0] == rightLumisLakeXCoord:
+                self.rooms[coord].background = 'rightmostLumisLake.bmp'
+                self.rooms[coord].leftXBoundary = width  * 0.33
+                self.rooms[coord].oxygenLoss = 0
+
+            elif coord[0] == leftLumisLakeXCoord:
+                self.rooms[coord].background = 'leftmostLumisLake.bmp'
+                self.rooms[coord].rightXBoundary = width * 0.66
+                self.rooms[coord].oxygenLoss = 0
+
+            else:
+                surfaceCoord = tuple(list(coord[:2]) + [9])
+                self.rooms[surfaceCoord] = room(surfaceCoord, 'desertCaveLumisLake')
+                self.rooms[surfaceCoord].roomThatCanBeManuallyTeleportedTo = self.rooms[coord]
+                self.rooms[coord].roomThatCanBeManuallyTeleportedTo = self.rooms[surfaceCoord]
+                self.rooms[coord].assignEnvironmentObjectsFromListOfLayouts()
+                self.rooms[coord].environmentObjectsUponRespawn = self.rooms[coord].environmentObjects.copy()
 
     def addMiddleDesertCaveLayerSpecialRooms(self, biome):
         yCoords = [member.coordinate[1] for member in biome]
@@ -214,6 +265,24 @@ class world:
             potentialCoords += experimentalWorld.checkAdjacentEmptySpaces(roomAdded)
             roomsAdded += 1
 
+    def whereCanSquareOfRoomsFitInEmptyArea(self, length, biome):
+        minXSide = min([i.coordinate[0] for i in biome]) - length
+        maxXSide = max([i.coordinate[0] for i in biome]) + length
+        minYSide = min([i.coordinate[1] for i in biome]) - length
+        maxYSide = max([i.coordinate[1] for i in biome]) + length
+        depth = biome[0].coordinate[2]
+        leftRangeLen  = maxXSide + 1 - length - minXSide
+        bottomRangeLen = maxYSide + 1 - length - minYSide
+        roomCoordsAtBottomLeftSquare = [[minXSide + i, minYSide + j] for i in range(length) for j in range(length)]
+
+        for i in range(leftRangeLen):
+            for j in range(bottomRangeLen):
+                coords = [(i + k[0], j + k[1], depth) for k in roomCoordsAtBottomLeftSquare.copy()]
+
+                if not [coord for coord in coords if coord in list(self.rooms.keys()) + self.unavailableCoords] and \
+                        [coord for coord in coords if self.connectsToBiome(coord, biome)]:
+                    return coords
+
     def makeRooms(self, qty, biome, rootRoom, difficultyQtys):
         potentialCoords = self.checkAdjacentEmptySpaces(rootRoom)
         calmRooms = []
@@ -227,6 +296,8 @@ class world:
             for coord in self.checkAdjacentEmptySpaces(newRoomCoord):
                 if coord not in potentialCoords:
                     potentialCoords.append(coord)
+
+        biomeRooms = calmRooms.copy()
 
         for key in list(difficultyQtys.keys()):
             for i in range(difficultyQtys[key]):
@@ -244,15 +315,17 @@ class world:
                     roomChanged.difficulty = key
 
         if biome == 'desert' and rootRoom[2] == -1:
-            self.addTopDesertCaveLayerSpecialRooms(calmRooms)
+            self.addTopDesertCaveLayerSpecialRooms(biomeRooms)
 
         elif biome == 'desert' and rootRoom[2] == -2:
-            self.addMiddleDesertCaveLayerSpecialRooms(calmRooms)
+            self.addMiddleDesertCaveLayerSpecialRooms(biomeRooms)
+
+        return biomeRooms
 
     def addDoors(self):
         coordinates = list(self.rooms.keys())
 
-        for place in list(self.rooms.values()):
+        for place in [i for i in self.rooms.values() if not i.disconnected]:
             if (place.coordinate[0] - 1, place.coordinate[1], place.coordinate[2]) in coordinates:
                 place.doors.append(plainSprite('door.bmp', width * 31 / 3200,
                                                height / 2))
@@ -268,12 +341,3 @@ class world:
             if (place.coordinate[0], place.coordinate[1] - 1, place.coordinate[2]) in coordinates:
                 place.doors.append(plainSprite('door.bmp', width / 2,
                                                height * 44 / 45))
-
-rooms = world()
-
-def saveWorld(file):
-    saveWithPickle(f'worldSave{file}.pickle', rooms)
-
-
-def loadWorld(file):
-    return loadWithPickle(f'worldSave{file}.pickle')
