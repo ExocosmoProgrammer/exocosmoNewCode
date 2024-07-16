@@ -36,8 +36,8 @@ while file is None:
     drawToFullScreen('exocosmoNewTitleScreen.bmp')
 
     if menu == 'title':
-        startButton.draw()
-        exitButton.draw()
+        startButton.drawingMethod()
+        exitButton.drawingMethod()
 
         if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
 
@@ -49,7 +49,7 @@ while file is None:
 
     elif menu == 'saveSelection':
         for i in range(1, 4):
-            exec(f'save{i}Button.draw()')
+            exec(f'save{i}Button.drawingMethod()')
 
         if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
             for i in range(1, 4):
@@ -135,8 +135,7 @@ def drawGame():
             draw(member)
 
         for trap in currentRoom.damagingTraps:
-            trap.progressAnimation()
-            draw(trap)
+            trap.drawingMethod()
 
         for item in currentRoom.droppedItems:
             draw(item)
@@ -170,14 +169,7 @@ def drawGame():
 
                 display.blit(IMAGES[enemy.delaySprite], enemy.place)
 
-        for projectile in pro.bullets:
-            if projectile.delay <= 0:
-                draw(projectile, projectile.rotation)
-
-            else:
-                display.blit(IMAGES[projectile.getSpriteWhenDelayed()], projectile.place)
-
-        for projectile in enemyBullets:
+        for projectile in pro.bullets + enemyBullets:
             if projectile.delay <= 0:
                 draw(projectile, projectile.rotation)
 
@@ -255,6 +247,7 @@ def foeActions():
             else:
                 enemy.actAsFoe(pro, rooms, currentRoom)
                 enemyBullets += enemy.newBullets
+                print([i.sprite for i in enemyBullets])
                 currentRoom.foes += enemy.newFoes
                 enemy.newFoes = []
                 enemy.newBullets = []
@@ -375,6 +368,14 @@ def checkCollisionsToFoes():
                         if foe.shieldedBy not in currentRoom.foes:
                             foe.hp -= projectile.damage
 
+                            if pro.canRechargePotion:
+                                pro.potionRechargeProgress += projectile.damage
+
+                                if pro.potionRechargeProgress >= 100:
+                                    pro.potionRechargeProgress = 100
+                                    pro.canRechargePotion = False
+                                    pro.potions = lesser(pro.potions + 1, pro.maxPotions)
+
                         projectile.piercing -= 1
 
                         if projectile.piercing < 0:
@@ -463,7 +464,7 @@ def roomClearingProcedure():
 
         except IndexError:
             pro.hp = lesser(130, pro.hp + 40)
-            pro.hpRect = pygame.Rect(0, 3, pro.hp * width / (10 * pro.maxHp), height / 90)
+            pro.updateHpRect()
             currentRoom.foes = []
 
             if currentRoom.coordinate == [0, 4, 10]:
@@ -624,7 +625,7 @@ def respawn():
     pro.y = pro.startingCoord[1]
     pro.hp = pro.maxHp + 1
     pro.hurt(1)
-    pro.hp += 1
+    pro.potions = pro.maxPotions
     pro.aggressiveFoes = []
     enemyBullets = []
     pro.bullets = []
