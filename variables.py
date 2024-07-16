@@ -44,7 +44,6 @@ for i in os.listdir(getProperPath('images/font')):
 backgroundsList = ['earlyMorningOvergroundDesertBackground.bmp', 'shelterBackgroundBMP.bmp',
                    'altShelterBackgroundBMP.bmp']
 BACKGROUNDS = {}
-LASERS = {}
 
 for i in os.listdir(getProperPath('images/backgrounds')):
     try:
@@ -59,6 +58,16 @@ for i in os.listdir(getProperPath('images/fullscreenImages')):
         IMAGES[i] = \
             pygame.transform.scale(pygame.image.load(f'images/fullscreenImages/{i}'[:-4] + '.png').convert_alpha(),
                                             (width, height))
+
+    except FileNotFoundError:
+        pass
+
+for i in os.listdir(getProperPath('images/imagesWithTwiceTheWidthAndHeightOfTheDisplay')):
+    try:
+        IMAGES[i] = \
+            pygame.transform.scale(pygame.image.load(f'images/imagesWithTwiceTheWidthAndHeightOfTheDisplay/{i}'[:-4] + \
+                                                     '.png').convert_alpha(),
+                                            (width * 2, height * 2))
 
     except FileNotFoundError:
         pass
