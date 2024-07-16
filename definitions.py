@@ -4,7 +4,7 @@ import random
 import pygame
 
 from pygame import mixer
-from variables import display, IMAGES, LASERS, BACKGROUNDS, width, height, fullscreenRect, playerHeight, getProperPath
+from variables import display, IMAGES, BACKGROUNDS, width, height, fullscreenRect, playerHeight, getProperPath
 
 
 def sqrt(x):
@@ -24,8 +24,8 @@ def getRadians(x, y):
 
 
 def getDegrees(x, y):
-    """getDegrees(x, y) returns the angle, in degrees, from -180 to 180, made by the x-axis right of the origin and a line
-        from the origin to point(x, y)."""
+    """getDegrees(x, y) returns the angle, in degrees, from -180 to 180, made by the x-axis right of the origin and a
+    line from the origin to point(x, y)."""
     return getRadians(x, y) * 180 / math.pi
 
 
@@ -42,67 +42,67 @@ def rotate(point, center, angle):
 
 
 def strIndex(string, character):
-    """strIndex(x, y) returns the index of the first usage of character y in text x."""
+    """strIndex(x, y) returns the index of the first usage of character y in string x."""
     for i in string:
         if i == character:
             return i
 
 
 def lesser(a, b):
-    """lesser(a, b) returns the lesser value of 'a' and 'b'."""
+    """lesser(a, b) returns the lesser value of a and b."""
     return a if a < b else b
 
 
 def greater(a, b):
-    """greater(a, b) returns the greater value of 'a' and 'b'."""
+    """greater(a, b) returns the greater value of a and b."""
     return a if a > b else b
 
 
 def checkLineCollision(a, b):
     """checkLineCollision(a, b) returns 1 if line object a and line object b collide within their ranges
         and domains, else checkLineCollision(a, b) returns 0."""
-    # If line b is vertical and line a is not, return 1 if the point where both lines intersect is within line b's
-    # range and line a's domain.
 
-    if a.slope != None and b.slope == None:
+    # A line with slope None represents a vertical line.
+    if a.slope is not None and b.slope is None:
+        # Find where a and b would intersect if they were extended infinitely.
         intersectPoint = (b.constant, a.constant + a.slope * b.constant)
 
+        # If the point of intersection is within the boundaries of both lines, return 1.
         if a.boundaries[0] <= intersectPoint[0] <= a.boundaries[1] and b.boundaries[0] <= intersectPoint[1] \
                 <= b.boundaries[1]:
             return 1
 
-    # If line a is vertical and line b is not, return 1 if the point where both lines intersect is within line b's
-    # range and line a's domain.
-
-    elif a.slope == None and b.slope != None:
+    elif a.slope is None and b.slope is not None:
+        # Find where a and b would intersect if they were extended infinitely.
         intersectPoint = (a.constant, b.constant + b.slope * a.constant)
 
+        # If the point of intersection is within the boundaries of both lines, return 1.
         if b.boundaries[0] <= intersectPoint[0] <= b.boundaries[1] and a.boundaries[0] <= intersectPoint[1] <= \
                 a.boundaries[1]:
             return 1
 
-    # Suppose neither line a nor line b are vertical. Then if their slopes are unequal and the
-    # point where lines a and b intersect is within the domains of both lines, return 1, else if their
-    # slopes are equal and their constants are equal and they share domain, return 1.
-
-    elif a.slope != None and b.slope != None:
+    elif a.slope is not None and b.slope is not None:
         try:
+            # Find where a and b would intersect if they were extended infinitely.
             intersectPoint = (b.constant - a.constant) / (a.slope - b.slope)
 
+            # If the point of intersection is within the boundaries of both lines, return 1.
             if b.boundaries[0] <= intersectPoint <= b.boundaries[1] and a.boundaries[0] <= intersectPoint <= \
                     a.boundaries[1]:
                 return 1
 
+        # The next except block will execute iff a and b have the same slope.
         except ZeroDivisionError:
+            # If a and b are segments of the same infinite line and their boundaries overlap, return 1.
             if a.constant == b.constant and a.boundaries[1] >= b.boundaries[0] and b.boundaries[1] >= \
                     a.boundaries[0]:
                 return 1
 
-    # If both lines are vertical, if they have the same x value for their points and share range, return 1.
-
+    # If both lines are vertical, are segments of the same line, and have overlapping boundaries, return 1.
     elif a.boundaries[1] >= b.boundaries[0] and b.boundaries[1] >= a.boundaries[0] and a.constant == b.constant:
         return 1
 
+    # If a and b do not collide, return 0.
     return 0
 
 
@@ -117,7 +117,7 @@ def checkConditionListItems(items, condition):
 
 
 def draw(sprite, rotation=0, scaling=None):
-    """draw(x, y) draws x's sprite rotated y degrees to the display."""
+    """draw(x, y, (a, b)) draws x's sprite, scaled to have dimensions a X b and rotated y degrees, to the display."""
 
     if scaling is None:
         scaledSprite = IMAGES[sprite.sprite]
@@ -129,7 +129,7 @@ def draw(sprite, rotation=0, scaling=None):
 
 
 def getDirection(x, y):
-    """getDirection(x, y) returns a letter to represent which way something should face."""
+    """getDirection(x, y) returns a letter from ['w', 'a', 's', 'd'] depending on x and y."""
 
     if abs(x) > abs(y):
         return 'd' if x > 0 else 'a'
@@ -141,6 +141,7 @@ def getDirection(x, y):
 def getPath(speed, a, b):
     """getPath(x, y, z) returns a list of the horizontal and vertical movement of a projectile that is starting
         with a center at point y and headed towards point z while moving x units per frame."""
+
     xdis = b[0] - a[0]
     ydis = b[1] - a[1]
 
@@ -160,9 +161,9 @@ def getPath(speed, a, b):
 
 
 def getPartiallyRandomPath(speed, a, b, angleVariationDegreeInt):
-    """getPath(x, y, z, variation) returns a list of the horizontal and vertical movement of a projectile that
-       is starting with a center at point y and headed at a random angle that is withing variation degrees of the
-        angle that is from point y to point z while moving at x units per frame."""
+    """getPath(x, y, z, a) returns a list of the horizontal and vertical movement of a projectile that
+       is starting with a center at point y and headed at a random angle that is withing a degrees of the
+       angle that is from point y to point z while moving at x units per frame."""
 
     initialAngle = getDegrees(b[0] - a[0], a[1] - b[1])
     newAngle = (initialAngle + random.randint(-int(angleVariationDegreeInt * 100),
@@ -170,22 +171,26 @@ def getPartiallyRandomPath(speed, a, b, angleVariationDegreeInt):
     return [math.cos(newAngle) * speed, math.sin(newAngle) * speed]
 
 
-def saveWithPickle(file, object):
+def saveWithPickle(file: str, object):
     """saveWithPickle(x, y) saves object y to file x. saveWithPickle(x) starts by making a file with name x if
        no file with name x can be accessed."""
+
+    # Modify file as needed to access the correct file.
     file = getProperPath(file)
 
+    # Attempt to save object to file.
     try:
         with open(file, 'wb') as saveFile:
             pickle.dump(object, saveFile)
 
+    # If no file with name file is found, create one.
     except FileNotFoundError:
         with open(file, 'xb') as saveFile:
             pickle.dump(object, saveFile)
 
 
-def loadWithPickle(file):
-    """loadWithPickle(x) tries to return the object that file x contains."""
+def loadWithPickle(file: str):
+    """loadWithPickle(x) returns the object that file x contains."""
 
     with open(getProperPath(file), 'rb') as fileLoaded:
         return pickle.load(fileLoaded)
@@ -209,7 +214,7 @@ def checkMouseCollision(unrotatedRectangle):
     return 0
 
 
-def drawToFullScreen(sprite):
+def drawToFullScreen(sprite: str):
     """drawToFullScreen(x) prints image x from the BACKGROUNDS folder to the full screen."""
     display.blit(BACKGROUNDS[sprite], fullscreenRect)
 
@@ -221,7 +226,8 @@ def signOrRandom(x):
 
 
 def skip(*args):
-    """skip(x) does nothing."""
+    """Calling the skip function does nothing regardless of what arguments are used. Skip may be used when a function
+    must be called but does not need to do anything."""
     pass
 
 
@@ -236,8 +242,12 @@ def percentChance(x):
 
 
 def getYBoundary(obj, playerYBoundary):
+    """getYBoundary(x, y) returns the top y boundary that object x should have in a room where the player has
+    top y boundary y."""
     return playerYBoundary + playerHeight - obj.place.height + obj.hitbox.height
 
 
 def getYBoundaryFromPlace(place, playerYBoundary, hitbox):
+    """getYBoundaryFromPlace(x, y, z) returns the top y boundary that an object with place x and hitbox z should have
+    in a room where the player has top y boundary y."""
     return playerYBoundary + playerHeight - place.height + hitbox.height
