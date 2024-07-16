@@ -9,8 +9,7 @@ import pygame
 
 class environmentObject:
     def __init__(self, name, x, y):
-        self.checksCollision = True
-
+        # Use a template for self based on name.
         match name:
             case 'desertCaveSmallAmethyst':
                 self.sprite = 'Amethyst.png'
@@ -29,7 +28,6 @@ class environmentObject:
             case 'desertCaveFuelPit':
                 self.sprite = 'desertCaveFuelPit.png'
                 self.hp = float('inf')
-                self.checksCollision = False
                 self.drops = item('fossilFuel', 'fossilFuelInInventory.png', qty=1, x=x, y=y)
     
             case 'desertCaveLargeFlower':
@@ -101,12 +99,16 @@ class environmentObject:
                 self.hitbox = rect(pygame.Rect(self.place.left, self.place.height * 31 / 66 + self.place.top,
                                                self.place.width, self.place.height * 35 / 66))
 
+        # self.place will most likely already be defined if self.hitbox should have different points than self.place.
         if not hasattr(self, 'place'):
             self.place = IMAGES[self.sprite].get_rect(center=(x, y))
 
+        # self.hitbox might need to have different points than self.place.
         if not hasattr(self, 'hitbox'):
             self.hitbox = rect(self.place)
 
+        # If self.drops is not defined, self will drop an invisible item that functions as an empty slot when in the
+        # player's inventory.
         if not hasattr(self, 'drops'):
             self.drops = droppedItem(x, y, 'invisiblePixels.png', item('empty',
                                                                        'invisiblePixels.png', stackSize=1))
