@@ -65,8 +65,7 @@ class player:
         self.mapShown = 0
         self.stamina = 100
         self.file = None
-        self.hpRect = pygame.Rect(0, 3, width / 10, height / 90)
-        self.hpGoneRect = pygame.Rect(0, 3, width / 10, height / 90)
+        self.hpRect = pygame.Rect(width / 160, height / 58, width * 61 / 400 * self.hp / self.maxHp, height / 50)
         self.bullets = []
         self.invincibility = 0
         self.speed = 1
@@ -83,6 +82,15 @@ class player:
         self.maxOxygen = 100
         self.oxygen = 100
         self.scaryCooldown = 1
+        self.timeSincePressingSpace = float('inf')
+        self.maxPotions = 2
+        self.potions = 2
+        self.potionRechargeProgress = 0
+        self.canRechargePotion = True
+        self.hpBar = plainSprite("hpBar.png", width * 33 / 400, height / 50)
+        self.hpGoneSprite = plainSprite('hpGone.png', width * 33 / 400, height / 50)
+        self.staminaBar = plainSprite("staminaBar.png", width * 33 / 400, height * 13 / 180)
+        self.staminaGoneSprite = plainSprite("staminaGone.png", width * 33 / 400, height * 13 / 180)
 
         for i in range(3):
             for j in range(10):
@@ -128,6 +136,9 @@ class player:
 
         return 0
 
+    def updateHpRect(self):
+        self.hpRect = pygame.Rect(width / 160, height / 90, width * 61 / 400 * self.hp / self.maxHp, height * 9 / 450)
+
     def hurt(self, damage):
         """self.hurt(damage) reduces the player's hp by damage, makes the player temporarily invincible, and update's
         the display that shows the player's hp."""
@@ -135,7 +146,7 @@ class player:
         if damage:
             self.hp -= damage
             self.invincibility = 250
-            self.hpRect = pygame.Rect(0, 3, self.hp * width / (10 * self.maxHp), height / 90)
+            self.updateHpRect()
 
     def progressAnimation(self):
         """The progressAnimation changes your animation, directionlessAnimation, and sprite as appropriate."""
@@ -176,6 +187,14 @@ class player:
             self.stamina -= 250
             self.invincibility = 160
 
+    def usePotion(self):
+        if self.potions:
+            self.potions -= 1
+            self.hp = lesser(self.hp + 70, self.maxHp)
+            self.potionRechargeProgress = 0
+            self.canRechargePotion = True
+            self.updateHpRect()
+
     def useActiveItem(self):
         """Makes the player use their active item as appropriate."""
 
@@ -202,7 +221,7 @@ class player:
         self.bullets.append(bullet(path[0], path[1], damage, sprite, self.x, self.y, animation=animation,
                                    impactAnimation=impactAnimation))
 
-    def fireInConsistenSpread(self, damage, sprite, speed, qty, totalAngleInRadians, animation=None,
+    def fireInConsistentSpread(self, damage, sprite, speed, qty, totalAngleInRadians, animation=None,
                               impactAnimation=None, linger=1600):
         angleChangePerProjectile = totalAngleInRadians / (qty - 1)
 
@@ -235,7 +254,7 @@ class player:
         self.fireCooldown = 60
 
     def useLumisFlamethrower(self):
-        self.fireInConsistenSpread(0.3, 'spiderProjectile1.png', 8, 5, math.pi / 8,
+        self.fireInConsistentSpread(0.3, 'spiderProjectile1.png', 8, 5, math.pi / 8,
                                    animation=[f'spiderProjectile{i}.png' for i in [1, 2] for j in range(30)],
                                    linger=100)
         self.fireCooldown = 45
@@ -247,6 +266,15 @@ class player:
                                     animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] for j in range(15)],
                                     timeBeforeStop=100, piercing=200000)
         self.fireCooldown = 100
+
+    def startSprinting(self):
+        self.sprinting = 1
+        self.updateSpeed()
+
+        if 30 < self.timeSincePressingSpace < 60 and self.speed <= 5:
+            self.speed  += 1
+
+        self.timeSincePressingSpace = 0
 
     def getInput(self):
         """The getInput function will perform actions based on the player's input."""
@@ -274,7 +302,10 @@ class player:
                 self.vr += 2
 
             elif event.key == pygame.K_SPACE:
-                self.sprinting = 1
+                self.startSprinting()
+
+            elif event.key == pygame.K_h:
+                self.usePotion()
 
             elif event.key == pygame.K_l:
                 if self.inventoryShown:
@@ -349,6 +380,7 @@ class player:
         self.stamina = lesser(self.stamina + GAMESPEED, 500)
         self.fireCooldown -= GAMESPEED
         self.invincibility -= GAMESPEED
+        self.timeSincePressingSpace += GAMESPEED
         currentRoom = self.proRoom()
 
         if currentRoom.oxygenLoss:
@@ -390,13 +422,15 @@ class player:
         draw(craftButton)
 
     def showInfo(self):
-        display.fill("#1abdbd", self.hpGoneRect)
-        display.fill("#cd300e", self.hpRect)
-        display.fill('#90b133', pygame.Rect(0, height / 20, width / 10,
-                                  height / 90))
-        staminaRect = pygame.Rect(0, height / 20, width * self.stamina / 5000,
-                                  height / 90)
-        display.fill("#1abdbd", staminaRect)
+        draw(self.hpGoneSprite)
+        display.blit(pygame.transform.scale(IMAGES['hp.png'], (self.hpRect.width, self.hpRect.height)),
+                     self.hpRect)
+        draw(self.hpBar)
+        staminaRect = pygame.Rect(width / 160, height * 56 / 900, width * 61 / 200000 * self.stamina, height / 50)
+        draw(self.staminaGoneSprite)
+        display.blit(pygame.transform.scale(IMAGES['stamina.png'], (staminaRect.width, staminaRect.height)),
+                     staminaRect)
+        draw(self.staminaBar)
 
         if self.proRoom().oxygenLoss:
             oxygenGoneRect = pygame.Rect(width / 100, height / 10, width / 100, height / 10)
@@ -404,6 +438,15 @@ class player:
                                      height * self.oxygen / self.maxOxygen / 10)
             display.fill("#6304b6ff", oxygenGoneRect)
             display.fill("#06d3ffff", oxygenRect)
+
+        if 30 < self.timeSincePressingSpace < 60:
+            totalTimeToSprintRect = pygame.Rect(width / 40, height / 10, width / 100, height / 10)
+            timeToSprintRect = pygame.Rect(width / 40, height / 10, width / 100,
+                                           height * (60 - self.timeSincePressingSpace) / 300)
+            display.fill("#1abdbd", totalTimeToSprintRect)
+            display.fill("#cd300e", timeToSprintRect)
+
+
 
     def updateInventory(self):
         self.activeItem = self.inventory[self.activeItemSlot]
