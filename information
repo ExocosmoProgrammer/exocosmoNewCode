@@ -1,2 +1,27 @@
 Only rooms where you can surface in the desert cave lumis lakes will have depths of nine.
 Only rooms in the ship will have depths of ten.
+
+Let x be an object of a class that I defined.
+
+if x.hitbox exists:
+    x.hitbox should be used to check collision with x and should be a member of the rect class.
+
+if x.hr and x.vr exist:
+    x.hr should represent the horizontal movement of x, and x.vr should represent the vertical movement of x.
+
+if x.sprite exists and not ((x is a member of the bullet class and x.delay > 0) or \
+        (x is a member of the foe class and x.spawnDelay > 0)):
+    x.sprite should represent what sprite will be drawn to the display to represent x.
+
+if x.place exists:
+    x.place should represent where x will be drawn to.
+
+if x.animationFrame exists:
+    int(x.animationFrame) should represent which frame of x's animation x is at.
+
+if x's __init__ method has a parameter, extra, that accepts all keyword arguments that are not covered by the method's
+other parameters, the method should use the following indented code
+    (for stat in list(extra.keys()):
+        exec(f'self.{stat} = extra[stat]'))
+
+or some other code to an identical effect.
