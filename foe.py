@@ -29,7 +29,7 @@ class foe:
         self.rotated = False
         self.angle = 0
         self.x = centerx
-        self.showsHp = 0
+        self.showsHp = False
         self.shieldedBy = None
         self.hpBarTop = height / 10
         self.y = centery
@@ -55,8 +55,7 @@ class foe:
                    'robotBodyguard': self.actAsRobotBodyguard, 'shipMiniboss': self.actAsShipMiniboss,
                    'temporaryBrokenTurret': self.actAsTemporaryBrokenTurret,
                    'tougherShipMiniboss': self.actAsTougherWatchdog, 'hellhound': self.actAsHellhound,
-                   'watchdogMeleeSummon': self.actAsWatchdogMeleeSummon,
-                   'watchdogRangedSummon': self.actAsWatchdogRangedSummon, 'antlionLarva': self.actAsAntlionLarva,
+                   'antlionLarva': self.actAsAntlionLarva,
                    'desertCaveExplosiveFoe': self.actAsDesertCaveExplosiveFoe,
                    'desertCaveSummoner': self.actAsDesertCaveSummoner,
                    'desertCaveSpittingGrub': self.actAsDesertCaveSpittingGrub,
@@ -220,7 +219,7 @@ class foe:
                 self.fourthFireCooldown = 0
                 self.mode = 'summoning'
                 self.summonsNext = False
-                self.showsHp = 1
+                self.showsHp = True
                 self.locksRoomOnAggression = True
     
             case 'tougherShipMiniboss':
@@ -234,17 +233,13 @@ class foe:
                 self.mode = 'standard'
                 self.standardMode = 'randomMovement'
                 self.accelerationCooldown = 0
-                self.summonCooldown = 18000
-                self.dashing = 0
-                self.showsHp = 1
+                self.showsHp = True
                 self.altFireCooldown = 0
                 self.laserAngle = 0
                 self.pause = 0
                 self.laser2Angle = 0
-                self.enraged = 0
+                self.enraged = False
                 self.thirdFireCooldown = 0
-                self.randomLaser1Angle = 0
-                self.randomLaser2Angle = 0
     
             case 'shipMiniboss':
                 self.hp = 500
@@ -253,8 +248,8 @@ class foe:
                 self.modeDuration = 1000
                 self.mode = 'chasing'
                 self.summonCooldown = 18000
-                self.dashing = 0
-                self.showsHp = 1
+                self.dashing = False
+                self.showsHp = True
     
             case 'temporaryBrokenTurret':
                 self.hp = float('inf')
@@ -271,20 +266,11 @@ class foe:
                 self.modeDuration = 1900
                 self.damage = 26
                 self.altFireCooldown = 100
-                self.dashing = 0
+                self.dashing = False
                 self.hpBarTop = height / 20
-                self.showsHp = 1
-                self.enraged = 0
-    
-            case 'watchdogMeleeSummon':
-                self.sprite = 'flamingRobotTemporarySprite.png'
-                self.hp = 2
-                self.damage = 26
-    
-            case 'watchdogRangedSummon':
-                self.sprite = 'temporaryRobotBodyguard.png'
-                self.hp = 2
-                self.damage = 26
+                self.showsHp = True
+                self.enraged = False
+                self.pause = 0
 
             case 'scary':
                 self.delayAnimation = [f'scaryDelayAnimation{i}.png' for i in range(1, 36) for j in range(22)]
@@ -295,9 +281,9 @@ class foe:
                 self.aggressionRadius = float('inf')
                 self.damage = 0
                 self.fireCooldown = 0
-                self.altFireCooldown = 550
+                self.modeDuration = 550
+                self.altFireCooldown = 0
                 self.thirdFireCooldown = 0
-                self.fourthFireCooldown = 0
                 self.mode = 'fireRandomly'
                 self.aggressive = False
                 self.searchAnimation = [f'scarySearch{i}.png' for i in range(1, 26) for j in range(30)]
@@ -795,15 +781,23 @@ class foe:
         # Progress self's animation.
         self.progressAnimation()
 
+
+        # Define a class, point, to hold attriubtes called x and y. The point class lets self more easily target
+        # projectiles at points other than the player's center.
         class point:
             def __init__(self, x, y):
                 self.x = x
                 self.y = y
 
+        # If self.altFireCooldown <= 0, enact the proper procedure.
         if self.altFireCooldown <= 0:
+            # Set self.vr to 0. It is important to do so so that self stops moving up at the end of the slam attack.
             self.vr = 0
+
+            # Set self.fireCooldown to 0.
             self.fireCooldown = 0
 
+            # Modify self.mode. Self should use attacks in the order summon, move, other, move.
             if self.mode == 'moving':
                 if self.summonsNext:
                     self.mode = 'summoning'
@@ -816,29 +810,43 @@ class foe:
             else:
                 self.mode = 'moving'
 
+            # Set self.altFireCooldown.
             self.altFireCooldown = 599 if self.mode == 'moving' else 1199
 
+        # Enact the proper procedure based on self.mode.
         if self.mode == 'moving':
+            # Set self.x and self.y.
             exec(self.movementCode)
+
+            # Modify self.t.
             self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
 
+            # If self.fireCooldown <= 0, set self.movementCode and self.fireCooldown.
             if self.fireCooldown <= 0:
                 self.setMovementInSemicircleTowardsTarget(target, width / 20)
                 self.fireCooldown = 600
 
         elif self.mode == 'slam':
+            # Make self move. Self may move up and down if self.mode == 'slam'.
             self.moveNormally()
 
+            # If self.fireCooldown <= 0, enact the proper procedure.
             if self.fireCooldown <= 0:
+                # Set self.animation.
                 self.animation = [f'desertCaveFlyMinibossSlam{i}.png' for i in range(1, 26) for j in range(15)]
+
+                # Create projectiles that will wait for many frames to appear, move, or check collision.
                 self.basicSpreadShot(25, math.pi * 2, target, 5,
                                      'desertCaveFlyMinibossLargeProjectile1.png', 60,
                                      animation=[f'desertCaveFlyMinibossLargeProjectile{i}.png' for i in \
                                                 range(1, 6) for j in range(15)], delay=165,
                                      delayedSprite='invisiblePixels.png', center=(self.x, self.y + height / 15))
+
+                # Set self.fireCooldown and self.vr.
                 self.fireCooldown = 400
                 self.vr = 0
 
+            # Determine self.vr based on self.fireCooldown.
             if self.fireCooldown > 250:
                 self.vr = 0
 
@@ -853,53 +861,66 @@ class foe:
 
         elif self.mode == 'laser':
             if self.fireCooldown <= 0:
+                # Set self.animation.
                 self.animation = [f'desertCaveFlyMinibossLaser{i}.png' for i in range(1, 11) for j in range(15)] + \
                                  ['desertCaveFlyMinibossLaser9.png'] * 150
+
+                # Fire a laser that will wait for many frames before appearing or checking collision.
                 angle = getRadians(target.x - self.x, target.y - self.y)
                 self.fireLaserToAngle(angle, 'desertCaveFlyMinibossLaserProjectile1.png', 60,
                                       animation=[f'desertCaveFlyMinibossLaserProjectile{i}.png' for i in range(1, 4) \
                                                  for j in range(30)], delay=120,
                                       linger=165, delaysprite='invisiblePixels.png')
 
+                # Set self.fireCooldown.
                 self.fireCooldown = 300
 
         elif self.mode == 'summoning':
             if self.fireCooldown <= 0:
-                self.fireCooldown = 1200
+                self.fireCooldown = float('inf')
                 self.thirdFireCooldown = 120
                 self.animation = [f'desertCaveFlyMinibossSummon{i}.png' for i in range(1, 10) for j in range(30)]
 
             if self.thirdFireCooldown <= 0:
                 self.thirdFireCooldown = float('inf')
-                self.newFoes.append(foe('desertCaveMoth', self.x + random.randint(-int(width / 10), int(width / 10)),
-                                        self.y + random.randint(-int(height / 10), int(height / 10)), self.room,
-                                        spawnDelay=100))
 
-                for i in range(3):
+                # Summon two moths near self.
+                for i in range(2):
+                    self.newFoes.append(foe('desertCaveMoth', self.x + random.randint(-int(width / 10),
+                                                                                      int(width / 10)),
+                                            self.y + random.randint(-int(height / 10), int(height / 10)), self.room,
+                                            spawnDelay=100))
+
+                # Summon six flies near self.
+                for i in range(6):
                     self.newFoes.append(foe('desertCaveSmallFly', self.x + random.randint(-int(width / 10),
                                                                                           int(width / 10)),
                                             self.y + random.randint(-int(height / 10), int(height / 10)), self.room,
                                             spawnDelay=100))
 
         elif self.mode == 'spit':
+            # Create a point to target that is directly below self.
             pointUsed = point(self.x, self.y + 1)
 
             if self.fireCooldown <= 0:
                 self.animation = [f'desertCaveFlyMinibossSpit{i}.png' for i in range(1, 19) for j in range(66)]
-                self.fireCooldown = 1200
+                self.fireCooldown = float('inf')
                 self.thirdFireCooldown = 396
 
             if self.thirdFireCooldown <= 0:
-                # (self.fireCooldown - 240) * math.pi / 468
-                # math.pi / 402
+                # Fire two projectiles that, with self, form an angle that a vertical line through self.x bisects.
                 self.basicSpreadShot(2, (self.fireCooldown - 804) * math.pi / 201,
                                      pointUsed, 6, 'desertCaveFlyMinibossLargeProjectile1.png', 60,
                                      animation=[f'desertCaveFlyMinibossLargeProjectile{i}.png' for i in range(1, 19) \
                                                 for j in range(60)])
+
+                # Set self.thirdFireCooldown.
                 self.thirdFireCooldown = 15
 
-    def basicSpreadShot(self, qty, totalAngle, target, speed, sprite, damage, animation=None, delay=0,
-                        delayedSprite='hellhoundFootstep.png', center=None):
+    def basicSpreadShot(self, qty, totalAngle, target, speed, sprite, damage, center=None, **kwargs):
+        """self.basicSpreadShot(a, b, c, d, e, f, g, h, i, j) fires a projectiles that have sprite e,
+        damage f, animation g, delay h, delayedSprite i, and center j and move at speed d where the outer projectiles
+        form an angle, which is bisected by a line from self to c, of b radians"""
         indivisualAngle = totalAngle / (qty - 1)
         radians = getRadians(target.x - self.x, self.y - target.y)
 
@@ -908,321 +929,361 @@ class foe:
 
         for i in range(qty):
             angle = radians - totalAngle / 2 + indivisualAngle * i
+            # Fire a projectile.
             self.newBullets.append(bullet(math.cos(angle) * speed, math.sin(angle) * speed,
-                                              damage, sprite, center[0], center[1], animation=animation, delay=delay,
-                                          delayedSprite=delayedSprite))
+                                              damage, sprite, center[0], center[1], **kwargs))
 
-    def basicClusterShot(self, qty, maxAngleInDegrees, target, speed, sprite, damage, animation=None):
+    def basicClusterShot(self, qty, maxAngleInDegrees, target, speed, sprite, damage, **kwargs):
+        """self.basicClusterShot(a, b, c, d, e, f, g) fires projectiles that have sprite e,
+        damage f, and animation g and move at speed d where the projectiles are fired at an angle that is within b / 2
+        degrees of the angle from self to c."""
         angleToPro = -getRadians(target.x - self.x, target.y - self.y)
 
         for i in range(qty):
             angle = angleToPro + random.randint(int(-maxAngleInDegrees),
                                                 int(maxAngleInDegrees)) * math.pi / 360
+            # Fire a projectile.
             self.newBullets.append(bullet(speed * math.cos(angle), speed * math.sin(angle), damage, sprite, self.x,
-                                          self.y, animation=animation))
+                                          self.y, **kwargs))
 
-    def basicStraightShot(self, speed, sprite, damage, target, linger=1600, **kwargs):
+    def basicStraightShot(self, speed, sprite, damage, target, **kwargs):
+        """self.basicStraightShot(a, b, c, d) fires a projectile that has sprite b and
+        damage c, moves at speed a, and moves in a line from self to d."""
         path = getPath(speed, (self.x, self.y), (target.x, target.y))
-        self.newBullets.append(bullet(path[0], path[1], damage, sprite, self.x, self.y, linger=linger))
-
-        for key in kwargs.keys():
-            exec(f'self.newBullets[-1].{key} = kwargs[key]')
+        self.newBullets.append(bullet(path[0], path[1], damage, sprite, self.x, self.y, **kwargs))
 
     def basicRandomShot(self, speed, sprite, damage, **kwargs):
+        """Fires a projectile in a random direction."""
         angle = random.randint(0, 360) * math.pi / 180
-        self.newBullets.append(bullet(speed * math.cos(angle), speed * math.sin(angle), damage, sprite, self.x, self.y))
+        self.newBullets.append(bullet(speed * math.cos(angle), speed * math.sin(angle), damage, sprite, self.x, self.y,
+                                      **kwargs))
 
-        for key in kwargs.keys():
-            exec(f"self.newBullets[-1].{key} = kwargs[key]")
-
-    def fireBouncySplittingProjectile(self, target, speed, damage, sprite, splitBulletsQty, splitProjectileSprite):
+    def fireBouncySplittingProjectile(self, target, speed, damage, sprite, splitBulletsQty, splitProjectileSprite,
+                                      **kwargs):
+        """Fires a bouncy projectile that, when destroyed, splits into a ring of projectiles that move outward."""
         path = getPath(speed, (self.x, self.y), (target.x, target.y))
         endEffect = f'for i in range({splitBulletsQty}): ' \
                     f'enemyBullets.append(bullet(1.5 * math.cos(i * 2 * math.pi / {splitBulletsQty}), ' \
                     f'1.5 * math.sin(i * 2 * math.pi / {splitBulletsQty}),' \
                     f' 26, "{splitProjectileSprite}", projectile.x, projectile.y, dissappearsAtEdges=0))'
         self.newBullets.append(bullet(path[0], path[1], damage, sprite, self.x, self.y, endEffect=endEffect, bounces=1,
-                                      dissappearsAtEdges=0, linger=1200))
+                                      dissappearsAtEdges=0, **kwargs))
 
     def setMovementToTarget(self, target, speed):
+        """Sets self's hr and vr so that self.moveNormally causes self to move straight towards the target's
+        current coordinate."""
         path = getPath(speed, (self.x, self.y), (target.x, target.y))
         self.hr = path[0]
         self.vr = path[1]
 
     def setMovementNearTarget(self, target, speed, variation):
+        """Sets self's hr and vr so that self.moveNormally causes self to move nearly straight towards the target's
+        current coordinate."""
         path = getPartiallyRandomPath(speed, (self.x, self.y), (target.x, target.y), variation)
         self.hr = path[0]
         self.vr = path[1]
 
     def setMovementPredictively(self, target, speed, *args):
+        """Sets self's hr and vr so that self.moveNormally causes self to move towards where the target is currently
+        going."""
         path = self.estimatePredictivePath(target, speed)
         self.hr = path[0]
         self.vr = path[1]
 
-    def fireBasicSemirandomLaserProjectile(self, target, angleVariation, sprite, damage, checksCollisionWhen='True',
-                                           animation=None, linger=10):
-        try:
-            radians = getRadians(target.x - self.x, target.y - self.y) + \
-                      random.randint(-10, 10) * angleVariation / 20
-
-        except ZeroDivisionError:
-            radians = 0
-
+    def fireBasicSemirandomLaserProjectile(self, target, angleVariation, sprite, damage, **kwargs):
+        """Fires a laser at roughly the angle from self to the target."""
+        radians = getRadians(target.x - self.x, target.y - self.y) + \
+                  random.randint(-10, 10) * angleVariation / 20
         offset = [math.cos(radians) * diagonal / 2, -math.sin(radians) * diagonal / 2]
         self.newBullets.append(bullet(0, 0, damage, sprite, self.x + offset[0], self.y + offset[1],
-                                      linger=linger, animation=animation, checksCollisionWhen=checksCollisionWhen,
-                                      rotation=radians * 180 / math.pi, piercing=float('inf')))
-
+                                      rotation=radians * 180 / math.pi, piercing=float('inf'), **kwargs))
         return radians
 
-    def fireLaserToAngle(self, angle, sprite, damage, animation=None, linger=10, checksCollisionWhen='True', delay=0,
-                         delaysprite='invisiblePixels.png'):
+    def fireLaserToAngle(self, angle, sprite, damage, delaysprite='invisiblePixels.png', **kwargs):
+        """Fires a laser to the specified angle."""
         offset = [math.cos(angle) * diagonal / 2, -math.sin(angle) * diagonal / 2]
         self.newBullets += [bullet(0, 0, damage, sprite, self.x + offset[0], self.y + offset[1],
-                                   linger=linger, animation=animation, rotation=angle * 180 / math.pi,
-                                   piercing=float('inf'), checksCollisionWhen=checksCollisionWhen, delay=delay,
-                                   delayedSprite=delaysprite)]
+                                   rotation=angle * 180 / math.pi, piercing=float('inf'),
+                                   delayedSprite=delaysprite, **kwargs)]
 
     def checkLineOfSight(self, target, room):
+        """Returns True if target is in self's line of sight else false."""
         angle = getRadians((target.x - self.x), (target.y - self.y))
+
+        # Add an invisible laser to self.newBullets
         self.fireLaserToAngle(angle, 'invisibleLaser.png', 0, linger=0)
+
+        # Remove the laser so that it is not added to enemyBullets in the main file, but store the laser in a variable.
         laser = self.newBullets.pop(-1)
 
+        # Return False if the laser hits an environmental object that is nearer to self than target is.
         for i in room.environmentObjects:
             if laser.hitbox.checkCollision(i.hitbox) and \
                     pointDistance((self.x, self.y), (i.hitbox.centerx, i.hitbox.centery)) < \
                     pointDistance((self.x, self.y), (target.hitbox.centerx, target.hitbox.centery)):
                 return False
 
+        # Default to returning True.
         return True
 
     def fireLaserWithWarning(self, angle, sprite, damage, warningLinger, laserLinger, laserDelay, animation=None):
+        """Fire a harmful laser with delay, and fire a harmless laser to show where the harmful laser will be."""
         self.fireLaserToAngle(angle, sprite, 0, animation=animation, linger=warningLinger,
                               checksCollisionWhen='False')
         self.fireLaserToAngle(angle, sprite, damage, animation=animation, linger=laserLinger, delay=laserDelay,
                               delaysprite='invisiblePixels.png')
 
     def actAsTougherWatchdogNotEnraged(self, target, *args):
+        """This function should be used by the tougher ship miniboss on each of its turns when the
+        hellhound is alive."""
+        
+        # Reduce cooldowns.
         self.modeDuration -= GAMESPEED
         self.fireCooldown -= GAMESPEED
         self.altFireCooldown -= GAMESPEED
         self.pause -= GAMESPEED
+        
+        # Progress self's animation.
         self.progressAnimation()
 
+        # If self.pause <= 0, enact the proper procedure.
         if self.pause <= 0:
-            if self.mode == 'standard':
-                self.standardModeDuration -= GAMESPEED
 
-                if self.pause <= 0:
-                    if self.standardMode == 'randomMovement':
-                        self.accelerationCooldown -= GAMESPEED
+            # Enact the proper procedure based on self.mode.
+            match self.mode:
+                case 'standard':
+                    # Reduce self.standardModeDuration.
+                    self.standardModeDuration -= GAMESPEED
 
-                        if self.moveNormally():
-                            self.accelerationCooldown = 0
+                    # Enact the proper procedure based on self.standardMode.
+                    match self.standardMode:
+                        case 'randomMovement':
+                            # Reduce self.accelerationCooldown.
+                            self.accelerationCooldown -= GAMESPEED
 
-                        if self.accelerationCooldown <= 0:
-                            self.setMovementNearTarget(target, 0.6, 57)
-                            self.accelerationCooldown = 100
+                            # Move. If self hits a wall, assign 0 t0 self.accelerationCooldown.
+                            if self.moveNormally():
+                                self.accelerationCooldown = 0
 
-                        if self.fireCooldown <= 0:
-                            self.basicStraightShot(5, 'watchdogFireball.png', 26, target)
-                            self.fireCooldown = 150
+                            # If self.accelerationCooldown <= 0, set self.hr and self.vr so that self moves nearly
+                            # straight towards the target and set self.accelerationCooldown.
+                            if self.accelerationCooldown <= 0:
+                                self.setMovementNearTarget(target, 0.6, 57)
+                                self.accelerationCooldown = 100
 
-                    elif self.standardMode == 'spreadShotWithMovement':
-                        self.setMovementToTarget(target, 0.4)
-                        self.moveNormally()
+                            # If self.fireCooldown <= 0, fire at the player and set self.fireCooldown.
+                            if self.fireCooldown <= 0:
+                                self.basicStraightShot(5, 'watchdogFireball.png', 26, target)
+                                self.fireCooldown = 150
+    
+                        case 'spreadShotWithMovement':
+                            # Move straight towards the target.
+                            self.setMovementToTarget(target, 0.4)
+                            self.moveNormally()
 
-                        if self.fireCooldown <= 0:
-                            self.basicSpreadShot(5, math.pi / 3, target, 3,
-                                                 'watchdogFireball.png', 26)
-                            self.fireCooldown = 350
+                            # If self.fireCooldown <= 0, fire a group of projectiles at the player and set
+                            # self.fireCooldown.
+                            if self.fireCooldown <= 0:
+                                self.basicSpreadShot(5, math.pi / 3, target, 3,
+                                                     'watchdogFireball.png', 26)
+                                self.fireCooldown = 350
+    
+                        case 'spreadShotWithTeleportation':
+                            # If self.fireCooldown <= 0, fire a group of projectiles at the player, set
+                            # self.fireCooldown, and set self.altFireCooldown.
+                            if self.fireCooldown <= 0:
+                                self.basicSpreadShot(5, math.pi / 3, target, 3,
+                                                     'watchdogFireball.png', 26)
+                                self.fireCooldown = 145
+                                self.altFireCooldown = 100
 
-                    elif self.standardMode == 'spreadShotWithTeleportation':
-                        if self.fireCooldown <= 0 and self.modeDuration >= 100:
-                            self.basicSpreadShot(5, math.pi / 3, target, 3,
-                                                 'watchdogFireball.png', 26)
-                            self.fireCooldown = 145
-                            self.altFireCooldown = 100
+                            # If self.altFireCooldown <= 0, teleport to a random place and set self.altFireCooldown.
+                            elif self.altFireCooldown <= 0:
+                                self.teleportRandomly(animation=watchdogTeleportAnimation)
+                                self.altFireCooldown = 145
 
-                        elif self.altFireCooldown <= 0:
-                            self.teleportRandomly(animation=watchdogTeleportAnimation)
-                            self.altFireCooldown = 145
-
+                    # If self.standardModeDuration <= 0, enact the proper procedure.
                     if self.standardModeDuration <= 0:
+                        # Set self.standardModeDuration and self.pause.
                         self.standardModeDuration = 1100
                         self.pause = 200
 
-                        if self.standardMode == 'randomMovement':
-                            self.standardMode = 'spreadShotWithMovement'
+                        # Based on self.standardMode, set self.standardMode and prepare self for self's next mode.
+                        match self.standardMode:
+                            case 'randomMovement':
+                                self.standardMode = 'spreadShotWithMovement'
 
-                        elif self.standardMode == 'spreadShotWithMovement':
-                            self.standardMode = 'spreadShotWithTeleportation'
-                            self.fireCooldown = 145
-                            self.altFireCooldown = 195
+                            case 'spreadShotWithMovement':
+                                self.standardMode = 'spreadShotWithTeleportation'
+                                self.fireCooldown = 145
+                                self.altFireCooldown = 195
 
-                        elif self.standardMode == 'spreadShotWithTeleportation':
-                            self.basicSpreadShot(5, math.pi / 3, target, 3, 'watchdogFireball.png',
-                                                 26)
-                            self.standardMode = 'randomMovement'
+                            case 'spreadShotWithTeleportation':
+                                self.basicSpreadShot(5, math.pi / 3, target, 3,
+                                                     'watchdogFireball.png',26)
+                                self.standardMode = 'randomMovement'
 
-            elif self.mode == 'randomLasers':
-                if self.fireCooldown <= 0 and self.modeDuration >= 50:
-                    self.laserAngle = self.fireBasicSemirandomLaserProjectile(target, 0.4,
-                                                                              'watchdogLaser1.png', 0,
-                                                                              animation=watchdogLaserAnim,
-                                                                              checksCollisionWhen='False', linger=100)
-                    self.laser2Angle = self.fireBasicSemirandomLaserProjectile(target, 0.4,
-                                                                               'watchdogLaser1.png', 0,
-                                                                               animation=watchdogLaserAnim,
-                                                                               checksCollisionWhen='False', linger=100)
-                    self.altFireCooldown = 124
-                    self.fireCooldown = 149
+                case 'randomLasers':
+                    if self.fireCooldown <= 0 and self.modeDuration >= 140:
+                        # Fire two harmless lasers near the player and two delayed, harmful lasers in the same places
+                        # as the harmless ones.
+                        for i in range(2):
+                            angle = getRadians(target.x - self.x, target.y - self.y) + random.randint(-20, 20) / 100
+                            self.fireLaserWithWarning(angle, 'watchdogLaser1.png', 26, 100,
+                                                      40, 124, animation=watchdogLaserAnim)
+                            self.fireCooldown = 149
+    
+                case 'bouncySplittingProjectiles':
+                    if self.fireCooldown <= 0:
+                        # Fire a bouncy, splitting projectile.
+                        self.fireBouncySplittingProjectile(target, 2, 26,
+                                                           'watchdogLargeFireball.png', 15,
+                                                           "watchdogFireballFragment.png")
 
-                elif self.altFireCooldown <= 0:
-                    self.fireLaserToAngle(self.laserAngle, 'watchdogLaser1.png', 26,
-                                          animation=watchdogLaserAnim,
-                                          linger=40)
-                    self.fireLaserToAngle(self.laser2Angle, 'watchdogLaser1.png', 26,
-                                          animation=watchdogLaserAnim,
-                                          linger=40)
-                    self.altFireCooldown = 276
+                        # Set self.fireCooldown and self.altFireCooldown.
+                        self.fireCooldown = 241
+                        self.altFireCooldown = 50
+    
+                    elif self.altFireCooldown <= 0:
+                        # Teleport to a random location and set self.altFireCooldown.
+                        self.teleportRandomly(animation=watchdogTeleportAnimation)
+                        self.altFireCooldown = 241
+    
+                case 'ringsOfProjectiles':
+                    if self.fireCooldown <= 0:
+                        # Fire a ring of projectiles and set self.fireCooldown.
+                        self.basicSpreadShot(21, 2 * math.pi, target, 4, 'watchdogFireball.png',
+                                             26)
+                        self.fireCooldown = 250
+    
+                case 'closingLasers':
+                    if self.altFireCooldown <= 0:
+                        # Set the angles that self should fire lasers at.
+                        self.laserAngle = getRadians(target.x - self.x, target.y - self.y) - math.pi / 4
+                        self.laser2Angle = getRadians(target.x - self.x, target.y - self.y) + math.pi / 4
 
-            elif self.mode == 'bouncySplittingProjectiles':
-                if self.fireCooldown <= 0:
-                    self.fireBouncySplittingProjectile(target, 2, 26,
-                                                       'watchdogLargeFireball.png', 15,
-                                                       "watchdogFireballFragment.png")
-                    self.fireCooldown = 241
-                    self.altFireCooldown = 50
+                        # Fire two lasers.
+                        self.fireLaserToAngle(self.laserAngle, 'watchdogLaser1.png', 26,
+                                              animation=watchdogLaserAnim,
+                                              checksCollisionWhen='False', linger=12)
+                        self.fireLaserToAngle(self.laser2Angle, 'watchdogLaser1.png', 26,
+                                              animation=watchdogLaserAnim,
+                                              checksCollisionWhen='False', linger=12)
 
-                elif self.altFireCooldown <= 0:
-                    self.teleportRandomly(animation=watchdogTeleportAnimation)
-                    self.altFireCooldown = 241
+                        # Set self.fireCooldown and self.altFireCooldown.
+                        self.fireCooldown = 75
+                        self.altFireCooldown = 2400
+    
+                    if self.fireCooldown <= 0:
+                        # Change the angles that the lasers will be fired at.
+                        self.laserAngle += math.pi / 120
+                        self.laser2Angle -= math.pi / 120
 
-            elif self.mode == 'ringsOfProjectiles':
-                if self.fireCooldown <= 0:
-                    self.basicSpreadShot(21, 2 * math.pi, target, 4, 'watchdogFireball.png',
-                                         26)
-                    self.fireCooldown = 250
+                        # Fire two lasers.
+                        self.fireLaserToAngle(self.laserAngle, 'watchdogLaser1.png', 26,
+                                              animation=watchdogLaserAnim,
+                                              linger=16)
+                        self.fireLaserToAngle(self.laser2Angle, 'watchdogLaser1.png', 26,
+                                              animation=watchdogLaserAnim,
+                                              linger=16)
 
-            elif self.mode == 'closingLasers':
-                if self.altFireCooldown <= 0:
-                    self.laserAngle = getRadians(target.x - self.x, target.y - self.y) - math.pi / 4
-                    self.laser2Angle = getRadians(target.x - self.x, target.y - self.y) + math.pi / 4
-                    self.fireLaserToAngle(self.laserAngle, 'watchdogLaser1.png', 26,
-                                          animation=watchdogLaserAnim,
-                                          checksCollisionWhen='False', linger=12)
-                    self.fireLaserToAngle(self.laser2Angle, 'watchdogLaser1.png', 26,
-                                          animation=watchdogLaserAnim,
-                                          checksCollisionWhen='False', linger=12)
-                    self.fireCooldown = 75
-                    self.altFireCooldown = 2200
+                        # Set self.fireCooldown.
+                        self.fireCooldown = 10
+    
+                case 'pillarsOfFire':
+                    if self.fireCooldown <= 0:
+                        # Create projectiles.
+                        self.putProjectilesRandomlyInHypotheticalCells(5, 5,
+                                                                       'watchdogFirePillar8.png', 26,
+                                                                       417, height * 39 / 225,
+                                                                       delayedAnimation=watchdogFirePillarAnim)
 
-                if self.fireCooldown <= 0:
-                    self.laserAngle += math.pi / 120
-                    self.laser2Angle -= math.pi / 120
-                    self.fireLaserToAngle(self.laserAngle, 'watchdogLaser1.png', 26,
-                                          animation=watchdogLaserAnim,
-                                          linger=16)
-                    self.fireLaserToAngle(self.laser2Angle, 'watchdogLaser1.png', 26,
-                                          animation=watchdogLaserAnim,
-                                          linger=16)
-                    self.fireCooldown = 10
-
-            elif self.mode == 'pillarsOfFire':
-                if self.fireCooldown <= 0:
-                    xInterval = int(width / 6)
-                    yInterval = int((height - self.yBoundary) / 6)
-                    minX = int(width / 6)
-                    minY = int(height / 6)
-
-                    for i in range(4):
-                        for j in range(4):
-                            self.createStillBulletRandomlyInSpace(i * xInterval + minX, (i + i) * xInterval + minX,
-                                                                  j * yInterval + self.yBoundary + minY,
-                                                                  (j + 1) * yInterval + self.yBoundary + minY,
-                                                                  'watchdogFirePillar8.png', 26,
-                                                                  417, delayAnim=watchdogFirePillarAnim)
-
-                    self.fireCooldown = 667
-
-            elif self.mode == 'pulledFires':
-                if self.fireCooldown <= 0:
-                    xInterval = int(width / 7)
-                    yInterval = int((height - self.yBoundary) / 7)
-                    minX = int(width / 7)
-                    minY = int(height / 7)
-
-                    for i in range(5):
-                        for j in range(5):
-                            self.fireAndPullProjectileInSpace(i * xInterval + minX, (i + i) * xInterval + minX,
-                                                              j * yInterval + self.yBoundary + minY,
-                                                              (j + 1) * yInterval + self.yBoundary + minY,
-                                                              'watchdogPulledFireball.png', 26, 5)
-
-                    self.fireCooldown = float('inf')
+                        # Set self.fireCooldown.
+                        self.fireCooldown = 667
+    
+                case 'pulledFires':
+                    if self.fireCooldown <= 0:
+                        self.fireCooldown = float('inf')
+                        
+                        # Create projectiles that will move towards self.
+                        self.putProjectilesInHypotheticalCellsAndPull(6, 6,
+                                                                      'watchdogPulledFireball.png', 26,
+                                                                      550, height * 34 / 225, 400)
 
         if self.modeDuration <= 0:
+            # Set cooldowns, set self.mode, and prepare for self's next attack.
+
             self.fireCooldown = 0
+            self.altFireCooldown = 0
+            self.pause = 200
 
             if self.mode == 'standard':
-                self.modeDuration = 2200
-                newModeNumber = random.randint(0, 6)
+                self.modeDuration = 2400
 
-                if newModeNumber == 0:
-                    self.mode = 'turretSummoning'
-                    self.pause = 2000
-                    self.newFoes += [foe('temporaryBrokenTurret', width * 3 / 4, height / 4, self.room,
-                                         spawnDelay=250),
-                                     foe('temporaryBrokenTurret', width * 3 / 4, height * 3 / 4,
-                                         self.room, spawnDelay=250),
-                                     foe('temporaryBrokenTurret', width / 4, height * 3 / 4, self.room,
-                                         spawnDelay=250),
-                                     foe('temporaryBrokenTurret', width / 4, height / 4, self.room, spawnDelay=250)]
-                    self.teleportToPoint(width / 2, height / 2, animation=watchdogTeleportAnimation)
-
-                elif newModeNumber == 1:
-                    self.mode = 'bouncySplittingProjectiles'
-                    self.fireCooldown = 251
-                    self.altFireCooldown = 301
-                    self.pause = 200
-
-                elif newModeNumber == 2:
-                    self.mode = 'randomLasers'
-                    self.fireCooldown = 200
-                    self.altFireCooldown = 326
-                    self.teleportToPoint(width / 2, height / 2, animation=watchdogTeleportAnimation)
-
-                elif newModeNumber == 3:
-                    self.mode = 'ringsOfProjectiles'
-                    self.pause = 200
-
-                elif newModeNumber == 4:
-                    self.mode = 'closingLasers'
-                    self.teleportToPoint(width / 2, height / 2, animation=watchdogTeleportAnimation)
-                    self.fireCooldown = 200
-                    self.altFireCooldown = 200
-                    self.modeDuration = 700
-
-                elif newModeNumber == 5:
-                    self.mode = 'pillarsOfFire'
-
-                elif newModeNumber == 6:
-                    self.mode = 'pulledFires'
-                    self.modeDuration = 1400
+                match random.randint(0, 6):
+                    case 0:
+                        self.mode = 'turretSummoning'
+    
+                        # Set self.pause so that self will be idle while its turrets are around.
+                        self.pause = 2400
+    
+                        # Create turrets.
+                        self.newFoes += [foe('temporaryBrokenTurret', width * 3 / 4, height / 4, self.room,
+                                             spawnDelay=100, duration=2300),
+                                         foe('temporaryBrokenTurret', width * 3 / 4, height * 3 / 4,
+                                             self.room, spawnDelay=100, duration=2300),
+                                         foe('temporaryBrokenTurret', width / 4, height * 3 / 4, self.room,
+                                             spawnDelay=100, duration=2300),
+                                         foe('temporaryBrokenTurret', width / 4, height / 4, self.room,
+                                             spawnDelay=100, duration=2300)]
+    
+                        # Teleport to the center of the display.
+                        self.teleportToPoint(width / 2, height / 2, animation=watchdogTeleportAnimation)
+    
+                    case 1:
+                        self.mode = 'bouncySplittingProjectiles'
+                        self.fireCooldown = 251
+                        self.altFireCooldown = 301
+    
+                    case 2:
+                        self.mode = 'randomLasers'
+                        self.fireCooldown = 200
+                        self.altFireCooldown = 326
+                        self.teleportToPoint(width / 2, height / 2, animation=watchdogTeleportAnimation)
+    
+                    case 3:
+                        self.mode = 'ringsOfProjectiles'
+    
+                    case 4:
+                        self.mode = 'closingLasers'
+                        self.teleportToPoint(width / 2, height / 2, animation=watchdogTeleportAnimation)
+                        self.fireCooldown = 200
+                        self.altFireCooldown = 200
+                        self.modeDuration = 700
+    
+                    case 5:
+                        self.mode = 'pillarsOfFire'
+    
+                    case 6:
+                        self.mode = 'pulledFires'
+                        self.modeDuration = 1600
 
             else:
                 self.mode = 'standard'
-                self.pause = 200
                 self.modeDuration = 1100
 
+        # If the hellhound is dead, set self.enraged so that self will act differently and set cooldowns.
         if self.dependentFoes[0].hp <= 0:
-            self.enraged = 1
+            self.enraged = True
             self.fireCooldown = 0
             self.altFireCooldown = 0
             self.modeDuration = 0
 
     def actAsTougherWatchdogEnraged(self, target, *args):
+        """This function should be used by the tougher ship miniboss on each of its turns when the hellhound is dead.
+        This function is not finished."""
+
+        # TODO finish this function.
         self.modeDuration -= GAMESPEED
         self.fireCooldown -= GAMESPEED
         self.altFireCooldown -= GAMESPEED
@@ -1235,17 +1296,17 @@ class foe:
                 self.laserAngle = getRadians((target.x - self.x), (target.y - self.y)) - math.pi / 4
                 self.laser2Angle = getRadians((target.x - self.x), (target.y - self.y)) + math.pi / 4
                 self.fireLaserToAngle(self.laserAngle, 'watchdogLaser1.png', 0,
-                                      watchdogLaserAnim, checksCollisionWhen='False', linger=100)
+                                      animation=watchdogLaserAnim, checksCollisionWhen='False', linger=100)
                 self.fireLaserToAngle(self.laser2Angle, 'watchdogLaser1.png', 0,
-                                      watchdogLaserAnim, checksCollisionWhen='False', linger=100)
+                                      animation=watchdogLaserAnim, checksCollisionWhen='False', linger=100)
             else:
                 if self.fireCooldown <= 0:
                     self.laserAngle += math.pi / 70
                     self.laser2Angle -= math.pi / 70
                     self.fireLaserToAngle(self.laserAngle, 'watchdogLaser1.png', 26,
-                                          watchdogLaserAnim)
+                                          animation=watchdogLaserAnim, linger=10)
                     self.fireLaserToAngle(self.laser2Angle, 'watchdogLaser1.png', 26,
-                                          watchdogLaserAnim)
+                                          animation=watchdogLaserAnim, linger=10)
                     self.fireCooldown = 10
 
                 if self.thirdFireCooldown <= 0:
@@ -1268,7 +1329,7 @@ class foe:
                         ymin = int((height - self.yBoundary) * j / 4 + self.yBoundary)
                         ymax = ymin + random.randint(0, int((height - self.yBoundary) / 4))
                         coords = self.createStillBulletRandomlyInSpace(xmin, xmax, ymin, ymax, 'firePillarFrame8.png',
-                                                              26, 750, delayAnim=watchdogFirePillarAnim)
+                                                              26, 750, delayedAnimation=watchdogFirePillarAnim)
                         self.createRingOfSpiralingBullets(8, 40, 3, 26, 'flamingRobotFireTrail.png', x=coords[0],
                                                           y=coords[1], delay=250, delaySprite='invisiblePixels.png',
                                                           linger=750)
@@ -1288,24 +1349,35 @@ class foe:
                 self.teleportToPoint(width / 2, height / 2)
 
     def actAsTougherWatchdog(self, target, *args):
-        if not self.enraged:
-            self.actAsTougherWatchdogNotEnraged(target)
+        """This function should be used by the tougher ship miniboss on each of its turns."""
 
-        else:
+        # Use a different function based on self.enraged, which will be True if the hellhound is alive and False
+        # otherwise.
+        if self.enraged:
             self.actAsTougherWatchdogEnraged(target)
 
-    def teleportToTarget(self, target, animation=None, spawnDelay=250):
-        if animation is not None:
-            self.newBullets.append(bullet(0, 0, 0, animation[0], self.x, self.y, animation=animation,
-                                          linger=250))
+        else:
+            self.actAsTougherWatchdogNotEnraged(target)
 
+    def teleportToTarget(self, target, animation=None, spawnDelay=250):
+        """Make self teleport to target's location."""
+
+        if animation is not None:
+            # Create a harmless projectile where self is before teleporting.
+            self.newBullets.append(bullet(0, 0, 0, animation[0], self.x, self.y, animation=animation,
+                                          linger=250, checksCollisionWhen='False'))
+
+        # Teleport to target's location.
         self.x, self.y = target.x, target.y
         self.spawnDelay = spawnDelay
         self.place.centerx, self.place.centery = self.x, self.y
         self.hitbox = rect(self.place)
 
     def createRingOfSpiralingBullets(self, speed, radiusToTheta, qty, damage, sprite, x=None,
-                                     y=None, linger=1600, delay=0, delaySprite='moltenDelaySprite.png'):
+                                     y=None, **kwargs):
+        """"""
+
+        # By default, the projectiles should be created at self's location.
         if x is None:
             x = self.x
 
@@ -1315,35 +1387,98 @@ class foe:
         thetaIncreaseRate = f'{speed} / sqrt(self.radius ** 2 + {radiusToTheta ** 2})'
         radiusIncreaseRate = f'{speed * radiusToTheta} / sqrt(self.radius ** 2 + {radiusToTheta ** 2})'
 
+        # Create projectiles.
         for i in range(qty):
             self.newBullets.append(bullet(0, 0, damage, sprite, x, y,
                                           polarMovement=f'({radiusIncreaseRate}, {thetaIncreaseRate})',
-                                          dissappearsAtEdges=0, theta=2 * i * math.pi / qty, delay=delay,
-                                          delayedSprite=delaySprite, linger=linger))
+                                          dissappearsAtEdges=0, theta=2 * i * math.pi / qty, **kwargs))
 
-    def createStillBulletRandomlyInSpace(self, xMin, xMax, yMin, yMax, sprite, damage, linger, rotation=0,
-                                         delayAnim=None):
+    def createStillBulletRandomlyInSpace(self, xMin, xMax, yMin, yMax, sprite, damage, linger, delay=250,
+                                         **kwargs):
+        """Create a still bullet in a random part of a specified area."""
+        
+        # Determine where the bullet should go.
         centerx = random.randint(int(xMin), int(xMax))
         centery = random.randint(int(yMin), int(yMax))
-        self.newBullets.append(bullet(0, 0, damage, sprite, centerx, centery, linger=linger, delay=250,
-                                      rotation=rotation, delayedAnimation=delayAnim, consistentPoint='midbottom',
-                                      dissappearsAtEdges=0))
-        return centerx, centery
+        
+        # Create the bullet.
+        self.newBullets.append(bullet(0, 0, damage, sprite, centerx, centery, linger=linger, delay=delay,
+                                      dissappearsAtEdges=0, **kwargs))
 
-    def fireAndPullProjectileInSpace(self, xMin, xMax, yMin, yMax, sprite, damage, speed):
+    def putProjectilesRandomlyInHypotheticalCells(self, qtyPerRow, qtyPerColumn, sprite, damage, linger,
+                                                                  topYBoundary, delay=250, **kwargs):
+        """Divide the room into cells and put a still projectile in each cell."""
+
+        # Get a rectangle to fit the sprite.
+        rectangleForSprite = IMAGES[sprite].get_rect()
+
+        # Determine the minimum and maximum x and y coordinates where projectiles may appear.
+        minX = self.leftXBoundary + rectangleForSprite.width / 2
+        minY = topYBoundary + rectangleForSprite.height / 2
+
+        # Determine the length and width of the area where projectiles may appear.
+        totalWidth = self.rightXBoundary  - rectangleForSprite.width / 2 - minX
+        totalHeight = self.bottomYBoundary - rectangleForSprite.height / 2 - minY
+
+        # Get a list of the x boundaries and y boundaries of cells to divide the room.
+        xBoundariesList = [minX + totalWidth * i / (qtyPerRow) for i in range(qtyPerRow + 1)]
+        yBoundariesList = [minY + totalHeight * i / (qtyPerColumn) for i in range(qtyPerColumn + 1)]
+
+        # Create a projectile in each cell.
+        for i in range(qtyPerRow):
+            for j in range(qtyPerColumn):
+                self.createStillBulletRandomlyInSpace(xBoundariesList[i], xBoundariesList[i + 1], yBoundariesList[j],
+                                                      yBoundariesList[j + 1], sprite, damage, linger, delay=delay,
+                                                      **kwargs)
+
+    def putProjectilesInHypotheticalCellsAndPull(self, qtyPerRow, qtyPerColumn, sprite, damage, linger, topYBoundary,
+                                                 timeToReachSelf, delayBeforePulling=150, delay=250, **kwargs):
+        """Divide the room into cells and put a projectile in each cell. After a delay, each projectile will move
+        towards self's current location."""
+
+        # Create projectiles.
+        self.putProjectilesRandomlyInHypotheticalCells(qtyPerRow, qtyPerColumn, sprite, damage, linger, topYBoundary,
+                                                       delay=delay, **kwargs)
+
+        # Determine how the projectiles will move.
+        for i in range(qtyPerRow * qtyPerColumn):
+            projectile = self.newBullets[-i]
+            path = getPath(pointDistance((projectile.x, projectile.y), (self.x, self.y)) / timeToReachSelf,
+                           (projectile.x, projectile.y), (self.x, self.y))
+            projectile.movementByDuration = (f'[0, 0] if self.currentDuration <= {delayBeforePulling} else '
+                                                      f'{path}')
+
+    def pullProjectileTowardsSelf(self, projectile, speed):
+        """Sets projectile's hr and vr so that projectile will move towards self's current location."""
+
+        path = getPath(speed, (projectile.x, projectile.y), (self.x, self.y))
+        (projectile.hr, projectile.vr) = path
+
+    def fireAndPullProjectileInSpace(self, xMin, xMax, yMin, yMax, sprite, damage, speed, delayBeforePulling, delay=250,
+                                     **kwargs):
+        """Create a projectile that will move towards self in a random part of a specified area."""
+        
+        # Determine where to put the projectile.
         centerx = random.randint(xMin, xMax)
         centery = random.randint(yMin, yMax)
-        path = getPath(speed * pointDistance((self.x, self.y), (centerx, centery)) / 1850,
-                       (centerx, centery), (self.x, self.y))
-        movement = f'([0, 0] if self.currentDuration <= 150 else [{path[0]}, {path[1]}])'
-        self.newBullets.append(bullet(0, 0, damage, sprite, centerx, centery, delay=250, rotation=0,
-                                      linger=1850 / speed + 150, durationBasedMovement=movement))
+        
+        # Determine how the projectile should move.
+        path = getPath(speed, (centerx, centery), (self.x, self.y))
+        movement = f'([0, 0] if self.currentDuration <= {delayBeforePulling} else [{path[0]}, {path[1]}])'
+        
+        # Create the projectile.
+        self.newBullets.append(bullet(path[0], path[1], damage, sprite, centerx, centery, delay=delay, 
+                                      durationBasedMovement=movement, **kwargs))
 
     def teleportRandomly(self, spawnDelay=250, animation=None):
+        """Make self teleport to a random location."""
+        
         if animation is not None:
+            # Create a harmless projectile where self is before teleporting.
             self.newBullets.append(bullet(0, 0, 0, animation[0], self.x, self.y, animation=animation,
                                           linger=250))
 
+        # Make self teleport.
         self.x = random.randint(int(self.leftXBoundary + self.place.width / 2),
                                 int(self.rightXBoundary - self.place.width / 2))
         self.y = random.randint(int(self.yBoundary + self.place.height / 2),
@@ -1353,170 +1488,245 @@ class foe:
         self.hitbox = rect(self.place)
 
     def teleportToPoint(self, x, y, animation=None, spawnDelay=250):
+        # Make self teleport to a specified point.
+        
         if animation is not None:
+            # Create a harmless projectile where self is before teleporting.
             self.newBullets.append(bullet(0, 0, 0, animation[0], self.x, self.y, animation=animation,
                                           linger=spawnDelay))
 
+        # Make self teleport.
         self.x, self.y = x, y
         self.spawnDelay = spawnDelay
         self.place.centerx, self.place.centery = self.x, self.y
         self.hitbox = rect(self.place)
 
     def teleportPredictively(self, target, animation=None, spawnDelay=250):
+        """Make self teleport to where target is predicted to be when self reappears."""
+
+        # Predict where target will be.
         destinationX = greater(lesser(target.x + target.hr * spawnDelay, width), 0)
         destinationY = greater(lesser(target.y + target.vr * spawnDelay, height), height * 0.17)
+        
+        # Teleport to where target is predicted to be.
         self.teleportToPoint(destinationX, destinationY, animation=animation, spawnDelay=spawnDelay)
 
     def actAsHellhound(self, target, *args):
+        """This function should be used by the hellhound on each of its turns."""
+        
+        # Reduce cooldowns.
         self.modeDuration -= GAMESPEED
         self.fireCooldown -= GAMESPEED
         self.altFireCooldown -= GAMESPEED
+        self.pause -= GAMESPEED
+        
+        # Set self.delaySprite because it will sometimes be changed right before self teleports.
         self.delaySprite = 'hellhoundFootstep.png'
+        
+        # Progress self's animation.
         self.progressAnimation()
 
-        if self.mode == 'standard':
-            if pointDistance((self.x, self.y), (target.x, target.y)) > diagonal / 10:
-                self.setMovementToTarget(target, 1.8)
+        # If self.pause <= 0, perform the proper actions based on self.mode.
+        if self.pause <= 0:
+            match self.mode:
+                case 'standard':
+                    if pointDistance((self.x, self.y), (target.x, target.y)) > diagonal / 10:
+                        # Make self move quickly to the target.
+                        self.setMovementToTarget(target, 2.4)
 
-            else:
-                self.setMovementToTarget(target, 0.6)
+                    else:
+                        # Make self move to the target at a slower pace.
+                        self.setMovementToTarget(target, 0.6)
 
-                if self.fireCooldown <= 0:
-                    path = getPath(1.6, (self.x, self.y), (target.x, target.y))
-                    self.newBullets.append(bullet(path[0], path[1], 26, 'hellhoundSlash.png', self.x,
-                                                  self.y, linger=200))
-                    self.fireCooldown = 250
+                        # If self.fireCooldown <= 0, fire and set self.fireCooldown.
+                        if self.fireCooldown <= 0:
+                            self.basicStraightShot(1.6, 'hellhoundSlash.png', 26, target, linger=200)
+                            self.fireCooldown = 250
 
-            self.moveNormally()
-
-            if self.altFireCooldown <= 0:
-                self.teleportRandomly(animation=hellhoundTeleportAnimation)
-                self.altFireCooldown = 1000
-
-        elif self.mode == 'flamingRobot':
-            if self.moveNormally():
-                self.dashing = 0
-
-                if self.modeDuration > 0:
-                    self.setMovementToTarget(target, 3)
-                    self.dashing = 1
+                    # Move.
                     self.moveNormally()
 
-            self.fireCooldown -= GAMESPEED
+                    # If self.altFireCooldown <= 0, teleport randomly and set self.altFireCooldown.
+                    if self.altFireCooldown <= 0:
+                        self.teleportRandomly(animation=hellhoundTeleportAnimation)
+                        self.altFireCooldown = 1000
 
-            if self.fireCooldown <= 0:
-                self.newBullets.append(bullet(0, 0, 26, 'hellhoundFootstep.png', self.x, self.y))
+                case 'flamingRobot':
+                    # Move. if self hits a wall, enact the proper procedure.
+                    if self.moveNormally():
+                        # Self cannot switch modes while self.dashing.
+                        self.dashing = False
 
-                self.fireCooldown = 100
+                        # If I didn't check if self.moveDuration > 0, self would be unable to switch modes again.
+                        if self.modeDuration > 0:
+                            # Set self's hr and vr so that self moves to the target's current location.
+                            self.setMovementToTarget(target, 3)
 
-        elif self.mode == 'dashingAndFiring':
-            if self.fireCooldown <= 0:
-                self.newBullets.append(bullet(0, 0, 26, 'hellhoundFootstep.png', self.x, self.y))
-                self.fireCooldown = 40
+                            # self.dashing should be set to one so that self cannot switch modes until hitting a wall again.
+                            self.dashing = True
 
-            if self.altFireCooldown <= 0:
-                self.newBullets.append(bullet(-self.vr * 2, self.hr * 2, 26,
-                                              'watchdogFireball.png', self.x, self.y))
-                self.newBullets.append(bullet(self.vr * 2, -self.hr * 2, 26,
-                                              'watchdogFireball.png', self.x, self.y))
-                self.altFireCooldown = 40
+                            # Move.
+                            self.moveNormally()
 
-            if self.moveNormally():
-                self.basicSpreadShot(45, 2 * math.pi, target, 4, 'watchdogFireball.png', 26)
-                self.modeDuration = 0
-                self.fireCooldown = 100
-                self.altFireCooldown = 100
+                    # If self.fireCooldown <= 0, fire a still projectile and set self.fireCooldown.
+                    if self.fireCooldown <= 0:
+                        self.newBullets.append(bullet(0, 0, 26, 'hellhoundFootstep.png', self.x,
+                                                      self.y))
 
-        elif self.mode == 'dashingAndSwiping':
-            if self.moveNormally():
-                self.dashing = 0
+                        self.fireCooldown = 50
 
-                if self.modeDuration > 0:
-                    self.dashing = 1
-                    self.setMovementToTarget(target, 3)
+                case 'dashingAndFiring':
+                    if self.fireCooldown <= 0:
+                        # Fire a still projectile and set self.fireCooldown.
+                        self.newBullets.append(bullet(0, 0, 26, 'hellhoundFootstep.png', self.x,
+                                                      self.y))
+                        self.fireCooldown = 40
 
-            if pointDistance((self.x, self.y), (target.x, target.y)) < diagonal / 5 and self.fireCooldown <= 0:
-                self.basicStraightShot(2.5, 'hellhoundSlash.png', 26, target, linger=200)
-                self.fireCooldown = 250
+                    if self.altFireCooldown <= 0:
+                        # Fire two projectiles that move perpendicularly to self. Set self.altFireCooldown.
+                        self.newBullets.append(bullet(-self.vr * 2, self.hr * 2, 26,
+                                                      'watchdogFireball.png', self.x, self.y))
+                        self.newBullets.append(bullet(self.vr * 2, -self.hr * 2, 26,
+                                                      'watchdogFireball.png', self.x, self.y))
+                        self.altFireCooldown = 40
 
-        elif self.mode == 'hidingInFire':
-            if self.moveNormally():
-                self.fireCooldown = lesser(15, self.fireCooldown)
+                    # Move. If self hits a wall, enact the proper procedure.
+                    if self.moveNormally():
+                        # Fire a ring of projectiles.
+                        self.basicSpreadShot(45, 2 * math.pi, target, 4, 'watchdogFireball.png',
+                                             26)
 
-            if self.fireCooldown <= 0:
-                xInterval = int(width / 7)
-                yInterval = int((height - self.yBoundary) / 7)
-                minX = int(width / 7)
-                minY = int(height / 7)
+                        # Set self.modeDuration so that self will immediately switch modes.
+                        self.modeDuration = 0
 
-                for i in range(5):
-                    for j in range(5):
-                        self.createStillBulletRandomlyInSpace(i * xInterval + minX, (i + i) * xInterval + minX,
-                                                              j * yInterval + self.yBoundary + minY,
-                                                              (j + 1) * yInterval + self.yBoundary + minY,
-                                                              'hellhoundDisguiseFire.png', 26,
-                                                              417)
+                case 'dashingAndSwiping':
+                    # The next block of code functions just like the first block of the case 'flamingRobot' block.
+                    if self.moveNormally():
+                        self.dashing = False
 
-                self.fireCooldown = 1333
-                self.delaySprite = 'invisiblePixels.png'
-                self.teleportRandomly(spawnDelay=417, animation=hellhoundTeleportAnimation)
-                self.newBullets.append(bullet(0, 0, 26, 'hellhoundDisguiseFire.png', self.x,
-                                              self.y, delay=250, linger=167,
-                                              durationBasedPlace=f'({self.x} + math.cos(self.currentDuration / 5) * 5,'
-                                              f'{self.y} + math.sin(self.currentDuration / 5) * 5)'))
-                self.altFireCooldown = 0
+                        if self.modeDuration > 0:
+                            self.dashing = True
+                            self.setMovementToTarget(target, 3)
 
-            elif self.altFireCooldown <= 0:
-                self.fireCooldown = 500
-                self.altFireCooldown = 501
-                self.setMovementPredictively(target, 6)
+                    # If self.fireCooldown <= 0 and self is close enough to target, fire and set self.fireCooldown.
+                    if pointDistance((self.x, self.y), (target.x, target.y)) < diagonal / 5 and \
+                            self.fireCooldown <= 0:
+                        self.basicStraightShot(2.5, 'hellhoundSlash.png', 26, target, linger=200)
+                        self.fireCooldown = 250
 
-        elif self.mode == 'dashingFromWalls':
-            if self.moveNormally():
-                self.dashing = 0
+                case 'hidingInFire':
+                    # Move. If self hits a wall, set self.fireCooldown.
+                    if self.moveNormally():
+                        self.fireCooldown = 15
 
-                if self.modeDuration > 0:
-                    self.dashing = 1
-                    self.delaySprite = self.sprite
-                    self.spawnDelay = 75
-                    self.setMovementPredictively(target, 15)
-                    self.fireLaserToAngle(getRadians(self.hr, self.vr), 'watchdogLaser1.png', 0,
-                                          animation=watchdogLaserAnim, linger=75, checksCollisionWhen='False')
+                    # If self.fireCooldown <= 0, enact the proper procedure.
+                    if self.fireCooldown <= 0:
+                        # Create 36 still projectiles.
+                        self.putProjectilesRandomlyInHypotheticalCells(6, 6,
+                                                                       'hellhoundDisguiseFire.png', 26,
+                                                                       417, height * 4 / 25)
 
+                        if False:
+                            xInterval = int(width / 7)
+                            yInterval = int((height - self.yBoundary) / 7)
+                            minX = int(width / 7)
+                            minY = int(height / 7)
+
+                            for i in range(5):
+                                for j in range(5):
+                                    self.createStillBulletRandomlyInSpace(i * xInterval + minX, (i + i) * xInterval + minX,
+                                                                          j * yInterval + self.yBoundary + minY,
+                                                                          (j + 1) * yInterval + self.yBoundary + minY,
+                                                                          'hellhoundDisguiseFire.png', 26,
+                                                                          417)
+
+                        # Set self.delaySprite so that self will be invisible while delayed.
+                        self.delaySprite = 'invisiblePixels.png'
+
+                        # Teleport to a random location.
+                        self.teleportRandomly(spawnDelay=417, animation=hellhoundTeleportAnimation)
+
+                        # Create a projectile at self's location. This projectile will move in loops.
+                        self.newBullets.append(bullet(0, 0, 26, 'hellhoundDisguiseFire.png',
+                                                      self.x,
+                                                      self.y, delay=250, linger=167,
+                                                      durationBasedPlace=f'({self.x} + math.cos(self.currentDuration '
+                                                                         f'/ 5) * 5,'
+                                                      f'{self.y} + math.sin(self.currentDuration / 5) * 5)'))
+
+                        # Set self.fireCooldown.
+                        self.fireCooldown = 500
+
+                        # Set self's movement predictively. Once self stops being delayed, it will dash at the player.
+                        self.setMovementPredictively(target, 6)
+
+                case 'dashingFromWalls':
+                    # Move. If self hits a wall, enact the proper procedure.
+                    # This block functions much like the case 'dashingAndSwiping' and case 'flamingRobot' blocks.
+                    if self.moveNormally():
+                        # This block functions much like the
+                        self.dashing = False
+
+                        if self.modeDuration > 0:
+                            self.dashing = True
+
+                            # Set self.pause.
+                            self.pause = 75
+
+                            # Set self's movement predictively so that self dashes at the player once self.pause <= 0.
+                            self.setMovementPredictively(target, 15)
+
+                            # Fire a laser to show where self will dash.
+                            self.fireLaserToAngle(getRadians(self.hr, self.vr), 'watchdogLaser1.png', 0,
+                                                  animation=watchdogLaserAnim, linger=75, checksCollisionWhen='False')
+                        
+        # If appropriate, teleport, switch modes and prepare act according to the new mode.
         if self.modeDuration <= 0 and not self.dashing:
+            # Set self.fireCooldown and self.altFireCooldown.
             self.fireCooldown = 0
             self.altFireCooldown = 0
+            
+            # Teleport randomly.
             self.teleportRandomly(animation=hellhoundTeleportAnimation)
 
             if self.mode == 'standard':
-                newMode = random.randint(0, 4)
-
-                if newMode == 0:
-                    self.mode = 'flamingRobot'
-                    self.modeDuration = 2900
-                    self.dashing = 1
-                    self.setMovementToTarget(target, 2)
-
-                elif newMode == 1:
-                    self.mode = 'dashingAndFiring'
-                    self.modeDuration = float('inf')
-                    self.setMovementToTarget(target, 2.5)
-
-                elif newMode == 2:
-                    self.mode = 'dashingAndSwiping'
-                    self.setMovementToTarget(target, 2.3)
-                    self.modeDuration = 2900
-                    self.dashing = 1
-
-                elif newMode == 3:
-                    self.mode = 'hidingInFire'
-                    self.modeDuration = 599
-
-                else:
-                    self.mode = 'dashingFromWalls'
-                    self.dashing = 1
-                    self.modeDuration = 2900
-                    self.setMovementToTarget(target, 3)
+                match random.randint(0, 4):
+                    case 0:
+                        self.mode = 'flamingRobot'
+                        self.modeDuration = 2900
+                        
+                        # Begin dashing at the target.
+                        self.dashing = True
+                        self.setMovementToTarget(target, 2)
+    
+                    case 1:
+                        self.mode = 'dashingAndFiring'
+                        
+                        # Self.modeDuration will be set to 0 once self hits a wall.
+                        self.modeDuration = float('inf')
+                        
+                        # Begin dashing at the target.
+                        self.setMovementToTarget(target, 2.5)
+    
+                    case 2:
+                        self.mode = 'dashingAndSwiping'
+                        self.modeDuration = 2900
+                        
+                        # Begin dashing at the target.
+                        self.setMovementToTarget(target, 2.3)
+                        self.dashing = True
+    
+                    case 3:
+                        self.mode = 'hidingInFire'
+                        self.modeDuration = 599
+    
+                    case 4:
+                        self.mode = 'dashingFromWalls'
+                        self.modeDuration = 2900
+                        
+                        # Begin dashing at the target.
+                        self.dashing = True
+                        self.setMovementToTarget(target, 3)
 
             else:
                 self.mode = 'standard'
@@ -1536,6 +1746,9 @@ class foe:
             self.fireCooldown = 1000
 
     def actAsShipMiniboss(self, target, *args):
+        """This function should be used by the ship miniboss on each of its turns. This function is not finished."""
+
+        # TODO finish this function.
         self.modeDuration -= GAMESPEED
         self.summonCooldown -= GAMESPEED
 
@@ -1591,11 +1804,11 @@ class foe:
 
         elif self.mode == 'flamingRobot':
             if self.moveNormally():
-                self.dashing = 0
+                self.dashing = False
 
                 if self.modeDuration > 0:
                     self.setMovementToTarget(target, 2)
-                    self.dashing = 1
+                    self.dashing = True
                     self.moveNormally()
 
             self.fireCooldown -= GAMESPEED
@@ -1630,7 +1843,7 @@ class foe:
                 else:
                     self.mode = 'flamingRobot'
                     self.setMovementToTarget(target, 2)
-                    self.dashing = 1
+                    self.dashing = True
                     self.moveNormally()
                     self.modeDuration = random.randint(4000, 6000)
 
@@ -1653,21 +1866,21 @@ class foe:
             self.hp = 0
 
     def createProjectilesThatMoveInwardsFromWalls(self, damage, sprite, qtyPerSide, speed, delay=100, **kwargs):
+        """Creates projectiles that move to the opposite end of the room on each wall."""
+
         for i in range(qtyPerSide):
             self.newBullets.append(bullet(speed, 0, damage, sprite,
-                                          0, height * i / (qtyPerSide - 1), delay=delay))
+                                          0, height * i / (qtyPerSide - 1), delay=delay, **kwargs))
             self.newBullets.append(bullet(-speed, 0, damage, sprite,
-                                          width, height * i / (qtyPerSide - 1), delay=delay))
+                                          width, height * i / (qtyPerSide - 1), delay=delay, **kwargs))
             self.newBullets.append(bullet(0, speed, damage, sprite,
-                                          width * i / (qtyPerSide - 1), 0, delay=delay))
+                                          width * i / (qtyPerSide - 1), 0, delay=delay, **kwargs))
             self.newBullets.append(bullet(0, -speed, damage, sprite,
-                                          width * i / (qtyPerSide - 1), height, delay=delay))
-
-        for i in range(qtyPerSide * 4):
-            for key in kwargs.keys():
-                exec(f"self.newBullets[-(i + 1)].{key} = kwargs[key]")
+                                          width * i / (qtyPerSide - 1), height, delay=delay, **kwargs))
 
     def giveProjectileHoming(self, projectile, minimumDistanceForHoming=float('inf')):
+        """Makes a projectile move straight to the player if it gets close enough to the projectile."""
+
         projectile.conditionalEffects = {'pointDistance((projectile.x, projectile.y), '
                                                              f'(pro.x, pro.y)) < {minimumDistanceForHoming}':
                                                                  "(projectile.hr, projectile.vr) = "
@@ -1677,7 +1890,24 @@ class foe:
                                                                  "projectile.hr == projectile.vr == 0 else "
                                                                  "getDegrees(projectile.hr, projectile.vr)"}
 
+    def teleportNearToTarget(self, target, xVariation, yVariation, spawnDelay=250):
+        """Teleport within a specified distance horizontally and vertically from target."""
+        maxXDis = int(xVariation / 2)
+        maxYDis = int(yVariation / 2)
+
+        # Determine where to go. Make sure not to go out of boundaries.
+        destination = [lesser(greater(target.x + random.randint(-maxXDis, maxXDis),
+                                      self.place.width / 2), width - self.place.width / 2),
+                       greater(lesser(target.y + random.randint(-maxYDis, maxYDis),
+                                      self.yBoundary), height - self.place.height / 2)]
+
+        # Teleport.
+        self.teleportToPoint(destination[0], destination[1], spawnDelay=spawnDelay)
+
     def actAsScary(self, target, room, *args):
+        """This function should be used by the scary on each of its turns."""
+
+        # The next block is for a feature that is not implemented yet.
         if not self.acted:
             self.newBullets = [bullet(0, 0, 0, 'scaryDarkFilterPng.png', 0, 0,
                                       linger=float('inf'), checksCollisionWhen='False', firer=self, target=target,
@@ -1687,130 +1917,180 @@ class foe:
             self.newBullets = []
             self.acted = True
 
+        # Progress self's animation.
         self.progressAnimation()
+
+        # Reduce self's cooldowns.
         self.duration -= GAMESPEED
         self.fireCooldown -= GAMESPEED
+        self.modeDuration -= GAMESPEED
         self.altFireCooldown -= GAMESPEED
         self.thirdFireCooldown -= GAMESPEED
-        self.fourthFireCooldown -= GAMESPEED
 
+        # If self.aggressive but self.mode is not one that should be used if self.aggressive, enact the proper
+        # procedure. Self should only execute the following block once.
         if self.aggressive and self.mode in ['fireRandomly', 'search', 'grid', 'investigating']:
-            self.aggressive = True
             self.mode = 'dashing'
             self.fireCooldown = 90
+            self.modeDuration = 550
             self.animation = self.idleAnimation.copy()
-            room.environmentObjects = []
-            self.damage = target.maxHp * 0.3
-            self.altFireCooldown = 550
 
+            # Destroy the room's environmental objects. They will come back once the player dies.
+            room.environmentObjects = []
+
+            # Self will inflict damage on contact now.
+            self.damage = target.maxHp * 0.3
+
+        # Enact the proper procedure based on self.mode.
         match self.mode:
             case 'fireRandomly':
                 if self.fireCooldown <= 0:
+                    # Fire randomly. The projectile that self fires should make self move to the projectile's current
+                    # location, set self.modeDuration, reduce the player's oxygen, set self.mode to
+                    # 'investigating' if self.mode is not 'searching', increase self.duration, and set self.animation
+                    # upon hitting the player.
                     self.basicRandomShot(3, 'spiderProjectile1.png', 0,
                                          firer=self,
                                          playerContactEffect="(projectile.firer.hr, projectile.firer.vr) = "
-                                                             "tuple(getPath(2, (projectile.firer.x, projectile.firer.y),"
+                                                             "tuple(getPath(2, (projectile.firer.x, "
+                                                             "projectile.firer.y),"
                                                              "(projectile.x, projectile.y))); "
-                                                             "projectile.firer.altFireCooldown = "
+                                                             "projectile.firer.modeDuration = "
                                                              "pointDistance((projectile.firer.x, projectile.firer.y), "
-                                                             "(projectile.x, projectile.y)) / 2 if projectile.firer.mode"
+                                                             "(projectile.x, projectile.y)) / 2 if "
+                                                             "projectile.firer.mode"
                                                              " not in ['search', 'investigating'] else "
-                                                             "projectile.firer.altFireCooldown; pro.oxygen -= 30;"
+                                                             "projectile.firer.modeDuration; pro.oxygen -= 30;"
                                                              "projectile.firer.mode = 'investigating' if "
                                                              "projectile.firer.mode != 'searching' else 'searching';"
                                                              "projectile.firer.duration += 1000;"
                                                              "projectile.firer.animation = "
                                                              "projectile.firer.idleAnimation.copy() "
                                                              )
+
+                    # Set self.fireCooldown.
                     self.fireCooldown = 10
 
+                    # If self.duration is low enough, give the projectile that self last fired homing.
                     if self.duration <= 2690:
                         self.giveProjectileHoming(self.newBullets[-1], diagonal / 7)
 
             case 'search':
+                # If self.fireCooldown <= 0 and the player is in self's sight, set self.aggressive and
+                # self.modeDuration.
                 if self.fireCooldown <= 0 and self.checkLineOfSight(target, room):
                     self.aggressive = True
-                    self.altFireCooldown = 1
+                    
+                    # Set self.modeDuration to 1 so that self cannot immediately teleport.
+                    self.modeDuration = 1
 
             case 'grid':
                 if self.fireCooldown <= 0:
+                    # Create projectiles that move in from the walls. The projectile that self fires should make self 
+                    # move to the projectile's current location, set self.modeDuration, reduce the player's oxygen, 
+                    # set self.mode to 'investigating' if self.mode is not 'searching', increase self.duration, and set 
+                    # self.animation upon hitting the player.
                     self.createProjectilesThatMoveInwardsFromWalls(0, 'spiderProjectile1.png',
                                                                random.randint(5, 10), 7, firer=self,
                                        playerContactEffect="(projectile.firer.hr, projectile.firer.vr) = "
                                                            "tuple(getPath(2, (projectile.firer.x, projectile.firer.y),"
                                                            "(projectile.x, projectile.y))); "
-                                                           "projectile.firer.altFireCooldown = "
+                                                           "projectile.firer.modeDuration = "
                                                            "pointDistance((projectile.firer.x, projectile.firer.y), "
                                                            "(projectile.x, projectile.y)) / 2 if projectile.firer.mode "
                                                            "not in ['search', 'investigating'] else "
-                                                           "projectile.firer.altFireCooldown; pro.oxygen -= 30;"
+                                                           "projectile.firer.modeDuration; pro.oxygen -= 30;"
                                                            "projectile.firer.mode = 'investigating' if "
                                                            "projectile.firer.mode != 'searching' else 'searching';"
                                                            "projectile.firer.duration += 1000;"
                                                            "projectile.firer.animation = "
                                                            "projectile.firer.idleAnimation.copy() ")
+
+                    # Set self.fireCooldown.
                     self.fireCooldown = 120
 
             case 'investigating':
                 # self.mode will only be 'investigating' in response to the player getting hit.
+                # Move. If self hits a wall, set self.modeDuration to 0. Self.hr and self.vr should have been set by
+                # the same exec function call that set self.mode to 'investigating'.
                 if self.moveNormally():
-                    self.altFireCooldown = 0
+                    self.modeDuration = 0
 
+                # If self hits an environmental object, set self.modeDuration to 0.
                 else:
                     for i in room.environmentObjects:
                         if i.hitbox.checkCollision(self.hitbox):
-                            self.altFireCooldown = 0
+                            self.modeDuration = 0
                             break
 
             case 'dashing':
-                if self.thirdFireCooldown <= 0:
-                    destination = [lesser(greater(target.x + random.randint(-int(width / 8), int(width / 8)),
-                                                  width / 50), width * 49 / 50),
-                                   greater(lesser(target.y + random.randint(-int(height / 8), int(height / 8)),
-                                                  height * 14 / 15), height / 15)]
+                if self.altFireCooldown <= 0:
+                    # Teleport near to the player.
+                    self.teleportNearToTarget(target, width / 4, height / 4)
+
+                    # Set self.delayFrame and self.delayAnimation.
                     self.delayFrame = 0
                     self.delayAnimation = self.fastTeleportAnimation.copy()
-                    self.teleportToPoint(destination[0], destination[1], spawnDelay=110)
-                    self.fireCooldown = 50
-                    self.thirdFireCooldown = 100
-                    self.fourthFireCooldown = 1
 
-                elif self.fourthFireCooldown <= 0:
+                    if False:
+                        """destination = [lesser(greater(target.x + random.randint(-int(width / 8), int(width / 8)),
+                                                      width / 50), width * 49 / 50),
+                                       greater(lesser(target.y + random.randint(-int(height / 8), int(height / 8)),
+                                                      height * 14 / 15), height / 15))
+                        self.teleportToPoint(destination[0], destination[1], spawnDelay=110)"""
+
+                    # Set cooldowns.
+                    self.fireCooldown = 50
+                    self.altFireCooldown = 100
+                    self.thirdFireCooldown = 1
+
+                elif self.thirdFireCooldown <= 0:
+                    # Make self move predictively to the target.
                     self.setMovementPredictively(target, 15)
+
+                    # Fire a laser to show where self will dash.
                     angle = getRadians(self.hr, self.vr)
                     self.fireLaserToAngle(angle, 'desertCaveFlyMinibossLaserProjectile1.png', 0,
                                           animation=[f'desertCaveFlyMinibossLaserProjectile{i}.png' for i in \
                                                      range(1, 4) for j in range(30)], linger=50,
                                           checksCollisionWhen='False')
-                    self.fourthFireCooldown = float('inf')
+
+                    # Set self.thirdFireCooldown so that self will wait until teleporting to execute this block again.
+                    self.thirdFireCooldown = float('inf')
 
                 elif self.fireCooldown <= 0:
+                    # This block does not set self.fireCooldown.
+                    # Move. Set self.altFireCooldown if self hits a wall.
                     if self.moveNormally():
-                        self.thirdFireCooldown = 0
+                        self.altFireCooldown = 0
 
+                    # If target is vulnerable and self is colliding with target, execute the next block.
                     if self.hitbox.checkCollision(target.hitbox) and target.invincibility <= 0:
+                        # Reduce target's oxygen.
                         target.oxygen -= 30
+
+                        # Hurt the target here to avoid unnecessary checks for collision.
                         target.hurt(0.3 * target.maxHp)
 
             case 'circling':
                 self.moveNormally()
 
                 if pointDistance((self.x, self.y), (target.x, target.y)) < diagonal / 6 and \
-                        self.fourthFireCooldown <= 0:
-                    self.fourthFireCooldown = float('inf')
-                    self.thirdFireCooldown = 400
+                        self.thirdFireCooldown <= 0:
+                    self.thirdFireCooldown = float('inf')
+                    self.altFireCooldown = 400
                     self.fireCooldown = 130
                     self.hr = self.vr = 0
                     self.theta = getRadians(target.x - self.x, target.y - self.y)
 
-                if self.fourthFireCooldown == float('inf'):
+                if self.thirdFireCooldown == float('inf'):
                     self.theta += math.pi / 50
                     self.x, self.y = (target.x - diagonal / 5 * math.cos(self.theta),
                                       target.y + diagonal / 5 * math.sin(self.theta))
 
-                if self.thirdFireCooldown <= 0:
-                    self.thirdFireCooldown = float('inf')
-                    self.fourthFireCooldown = 100
+                if self.altFireCooldown <= 0:
+                    self.altFireCooldown = float('inf')
+                    self.thirdFireCooldown = 100
                     self.setMovementToTarget(target, 4)
                     self.fireCooldown = float('inf')
 
@@ -1819,23 +2099,23 @@ class foe:
                     self.basicStraightShot(5, 'spiderProjectile1.png', target.maxHp * 0.3, target,
                                            playerContactEffect="pro.oxygen -= 30")
 
-                if self.fourthFireCooldown <= 0:
+                if self.thirdFireCooldown <= 0:
                     self.setMovementToTarget(target, 12)
 
             case 'teleportingAndFiringInRings':
                 if self.fireCooldown <= 0:
-                    self.thirdFireCooldown = 1
+                    self.altFireCooldown = 1
                     self.fireCooldown = 100
                     self.delayFrame = 0
                     self.delayAnimation = self.fastTeleportAnimation.copy()
                     self.teleportPredictively(target, spawnDelay=110)
 
-                elif self.thirdFireCooldown <= 0:
+                elif self.altFireCooldown <= 0:
                     self.basicSpreadShot(20, 2 * math.pi, target, 4, 'spiderProjectile1.png',
                                          target.maxHp * 0.3)
-                    self.thirdFireCooldown = float('inf')
+                    self.altFireCooldown = float('inf')
 
-        if self.altFireCooldown <= 0:
+        if self.modeDuration <= 0:
             self.newFoes.append(foe('scaryBubble', random.randint(int(width / 5), int(width * 4 / 5)), height / 2,
                                     self.room))
 
@@ -1853,39 +2133,39 @@ class foe:
                     case 'dashing':
                         self.fireCooldown = 0
                         self.mode = 'teleportingAndFiringInRings'
-                        self.altFireCooldown = 390
+                        self.modeDuration = 390
 
                     case 'teleportingAndFiringInRings':
-                        self.altFireCooldown = 1100
-                        self.fourthFireCooldown = 0
+                        self.modeDuration = 1100
+                        self.thirdFireCooldown = 0
                         self.mode = 'circling'
 
                     case 'circling':
-                        self.altFireCooldown = 550
+                        self.modeDuration = 550
                         self.fireCooldown = 90
-                        self.thirdFireCooldown = 0
+                        self.altFireCooldown = 0
                         self.mode = 'dashing'
 
             else:
                 match self.mode:
                     case 'search':
                         self.mode = 'fireRandomly'
-                        self.altFireCooldown = 350
+                        self.modeDuration = 350
 
                     case 'fireRandomly':
                         self.mode = 'grid'
-                        self.altFireCooldown = 550
+                        self.modeDuration = 550
 
                     case 'grid':
                         self.mode = 'search'
-                        self.altFireCooldown = 750
+                        self.modeDuration = 750
                         self.fireCooldown = 300
                         self.animation = self.searchAnimation.copy()
                         self.animationFrame = 0
 
                     case 'investigating':
                         self.mode = 'search'
-                        self.altFireCooldown = 750
+                        self.modeDuration = 750
                         self.fireCooldown = 300
                         self.animation = self.searchAnimation.copy()
                         self.animationFrame = 0
