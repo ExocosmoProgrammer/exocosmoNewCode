@@ -1890,16 +1890,23 @@ class foe:
                                                                  "projectile.hr == projectile.vr == 0 else "
                                                                  "getDegrees(projectile.hr, projectile.vr)"}
 
-    def teleportNearToTarget(self, target, xVariation, yVariation, spawnDelay=250):
+    def teleportNearToTarget(self, target, xVariation, yVariation, spawnDelay=250, minX=None, maxX=None, minY=None,
+                             maxY=None):
         """Teleport within a specified distance horizontally and vertically from target."""
         maxXDis = int(xVariation / 2)
         maxYDis = int(yVariation / 2)
 
+        # minX, maxX, minY, and maxY should all have acceptable default values.
+        minX = self.place.width / 2 if minX is None else minX
+        maxX = width - self.place.width / 2 if maxX is None else maxX
+        minY = self.yBoundary if minY is None else minY
+        maxY = height - self.place.height / 2 if maxY is None else maxY
+
         # Determine where to go. Make sure not to go out of boundaries.
         destination = [lesser(greater(target.x + random.randint(-maxXDis, maxXDis),
-                                      self.place.width / 2), width - self.place.width / 2),
+                                      minX), maxX),
                        greater(lesser(target.y + random.randint(-maxYDis, maxYDis),
-                                      self.yBoundary), height - self.place.height / 2)]
+                                      minY), maxY)]
 
         # Teleport.
         self.teleportToPoint(destination[0], destination[1], spawnDelay=spawnDelay)
@@ -2026,18 +2033,13 @@ class foe:
             case 'dashing':
                 if self.altFireCooldown <= 0:
                     # Teleport near to the player.
-                    self.teleportNearToTarget(target, width / 4, height / 4)
+                    self.teleportNearToTarget(target, width / 4, height / 4, minX=width * 79 / 800,
+                                              maxX=width * 721 / 800,
+                                              minY=height * 78 / 225, maxY=height * 731 / 900, spawnDelay=110)
 
                     # Set self.delayFrame and self.delayAnimation.
                     self.delayFrame = 0
                     self.delayAnimation = self.fastTeleportAnimation.copy()
-
-                    if False:
-                        """destination = [lesser(greater(target.x + random.randint(-int(width / 8), int(width / 8)),
-                                                      width / 50), width * 49 / 50),
-                                       greater(lesser(target.y + random.randint(-int(height / 8), int(height / 8)),
-                                                      height * 14 / 15), height / 15))
-                        self.teleportToPoint(destination[0], destination[1], spawnDelay=110)"""
 
                     # Set cooldowns.
                     self.fireCooldown = 50
@@ -2073,61 +2075,93 @@ class foe:
                         target.hurt(0.3 * target.maxHp)
 
             case 'circling':
-                self.moveNormally()
-
                 if pointDistance((self.x, self.y), (target.x, target.y)) < diagonal / 6 and \
                         self.thirdFireCooldown <= 0:
+                    # Self will circle around the player when self.thirdFireCooldown == float('inf').
+                    # Set cooldowns.
                     self.thirdFireCooldown = float('inf')
                     self.altFireCooldown = 400
                     self.fireCooldown = 130
+
+                    # Set self.hr and self.vr to 0 since they will be useless for now.
                     self.hr = self.vr = 0
+
+                    # Get the angle from self to target so that self can start rotating around target without sudden
+                    # movement.
                     self.theta = getRadians(target.x - self.x, target.y - self.y)
 
                 if self.thirdFireCooldown == float('inf'):
+                    # Increase the angle from target to self.
                     self.theta += math.pi / 50
+
+                    # Set self.x and self.y.
                     self.x, self.y = (target.x - diagonal / 5 * math.cos(self.theta),
                                       target.y + diagonal / 5 * math.sin(self.theta))
 
                 if self.altFireCooldown <= 0:
+                    # Set cooldowns. While self.thirdFireCooldown is not infinity, self should stop circling.
                     self.altFireCooldown = float('inf')
                     self.thirdFireCooldown = 100
-                    self.setMovementToTarget(target, 4)
                     self.fireCooldown = float('inf')
+                    self.setMovementToTarget(target, 4)
 
                 if self.fireCooldown <= 0:
+                    # This block should repeatedly execute while self is circling.
                     self.fireCooldown = 65
+
+                    # Fire a projectile that takes away oxygen upon colliding with the player.
                     self.basicStraightShot(5, 'spiderProjectile1.png', target.maxHp * 0.3, target,
                                            playerContactEffect="pro.oxygen -= 30")
 
+                # If self.thirdFireCooldown <= 0, self should do nothing but continuously move towards the target.
                 if self.thirdFireCooldown <= 0:
                     self.setMovementToTarget(target, 12)
 
+                if self.hr or self.vr:
+                    self.moveNormally()
+
             case 'teleportingAndFiringInRings':
                 if self.fireCooldown <= 0:
+                    # Set cooldowns. Self.altFireCooldown is set to 1 so that self will wait until just after
+                    # teleporting to fire.
                     self.altFireCooldown = 1
                     self.fireCooldown = 100
+
+                    # Set self's animation while delayed.
                     self.delayFrame = 0
                     self.delayAnimation = self.fastTeleportAnimation.copy()
+
+                    # Teleport predictively.
                     self.teleportPredictively(target, spawnDelay=110)
 
                 elif self.altFireCooldown <= 0:
+                    # Fire a ring of projectiles.
                     self.basicSpreadShot(20, 2 * math.pi, target, 4, 'spiderProjectile1.png',
                                          target.maxHp * 0.3)
+
+                    # Set self.altFireCooldown. Self should only fire right after teleporting.
                     self.altFireCooldown = float('inf')
 
+        # If self.modeDuration <= 0, execute the following block.
         if self.modeDuration <= 0:
-            self.newFoes.append(foe('scaryBubble', random.randint(int(width / 5), int(width * 4 / 5)), height / 2,
-                                    self.room))
+            # Fire a harmless bullet that replenishes oxygen upon colliding with target.
+            self.newBullets.append(bullet(0, 0.5, 0, 'nanotechRevolverBulletImpactFrame1.png',
+                                          self.x, self.y,
+                                          playerContactEffect='pro.oxygen = lesser(pro.maxOxygen, pro.oxygen + 7)'))
 
+            # If not self.aggressive and self is not investigating, execute the next block.
             if self.mode != 'investigating' and not self.aggressive:
-                if self.duration < 0 and not self.aggressive:
+                # If self.duration < 0, make self die.
+                if self.duration < 0:
                     self.hp = 0
 
+                # Otherwise, set self's animation while delayed and teleport.
                 else:
                     self.delayFrame = 0
                     self.delayAnimation = self.teleportAnimation.copy()
                     self.teleportRandomly(spawnDelay=330)
 
+            # Modify self.mode and prepare for self's next action.
             if self.aggressive:
                 match self.mode:
                     case 'dashing':
@@ -2171,6 +2205,9 @@ class foe:
                         self.animationFrame = 0
 
     def actAsScaryBubble(self, target, *args):
+        """This function should never be used."""
+
+        # TODO delete this.
         self.moveWithoutWallCollision()
 
         if self.hitbox.checkCollision(target.hitbox):
@@ -2181,59 +2218,80 @@ class foe:
             self.hp = 0
 
     def actAsGenericWanderingFoe(self, rooms, *args):
+        """This function is the default function for foes to use while wandering."""
+
+        # Reduce the wait until self turns.
         self.turnCooldownWhileWandering -= GAMESPEED
 
+        # If self has an animation, progress self's animation.
         try:
             self.progressAnimation()
 
         except AttributeError:
             pass
 
+        # If self.turnCooldownWhileWandering <= 0, execute the following block.
         if self.turnCooldownWhileWandering <= 0:
-            self.hr = random.randint(-100, 100) / 400
-            self.vr = plusOrMinus(sqrt(1 / 16 - self.hr ** 2))
+            # Set self.hr and self.vr. Self's speed should remain constant.
+            angle = random.randint(0, 360) * math.pi / 180
+            self.hr, self.vr = math.cos(angle) / 4, math.sin(angle) / 4
+
+            # Set self.turnCooldownWhileWandering.
             self.turnCooldownWhileWandering = 350
 
+        # Move. Turn around if self hits a wall.
         if self.moveNormally():
             self.hr = -self.hr
             self.vr = -self.vr
 
+        # If self.rotated, set self.angle to be the angle that self is moving at.
         if self.rotated:
             self.angle = getRadians(self.hr, -self.vr)
 
     def showHp(self):
+        """Displays self's hp."""
         hpGoneRect = pygame.Rect(width * 4 / 5, self.hpBarTop, width * 1 / 6, height / 70)
         hpRect = pygame.Rect(width * 4 / 5, self.hpBarTop, width * 1 / 6 * self.hp / self.initialHp, height / 70)
         display.fill('#1abdbd', hpGoneRect)
         display.fill('#cd300e', hpRect)
 
     def actAsFoe(self, target, rooms, room, *args):
+        """Every foe that has noticed the player should use this function each frame. """
+
         if self.spawnDelay <= 0:
+            # Keep track of where self was at the start of this function.
             oldX = self.x
             oldY = self.y
-            self.action(target, room)
+
+            # Perform the
+            self.action(target, room, *args)
+
+            # Make self.place to be centered around self.x, self.y
             self.place.centerx, self.place.centery = self.x, self.y
 
+            # If self.hasFullHitbox, execute the next block.
             if self.hasFullHitbox:
-                self.hitbox.updatePoints()
-
+                # Set self.hitbox. If self.rotated, self's hitbox should be rotated.
                 if self.rotated:
                     self.hitbox = rect(IMAGES[self.sprite].get_rect(center=(self.x, self.y)), -self.angle)
 
                 else:
                     self.hitbox = rect(IMAGES[self.sprite].get_rect(center=(self.x, self.y)))
 
+            # If not self.goesThroughObjects and self is colliding with an environmental object, execute the next block.
             if not self.goesThroughObjects:
                 if [obj for obj in rooms.rooms[tuple(self.room)].environmentObjects if \
                             obj.hitbox.checkCollision(self.hitbox)]:
+                    # Take self.x and self.y back to what they were at the start of this function.
                     self.x = oldX
                     self.y = oldY
+
+                    # Update self.place.
                     self.place.centerx = self.x
                     self.place.centery = self.y
 
+                    # If self.hasFullHitbox, update self.hitbox.
                     if self.hasFullHitbox:
-                        self.hitbox.updatePoints()
-
                         if self.rotated:
                             self.hitbox = rect(IMAGES[self.sprite].get_rect(center=(self.x, self.y)), -self.angle)
 
@@ -2244,20 +2302,24 @@ class foe:
             self.spawnDelay -= GAMESPEED
 
     def chaseThroughRooms(self, target, axis, rooms, *args):
+        """Chase the player through rooms."""
+
+        # Reduce self.cooldownPerRoomSwitch.
         self.cooldownPerRoomSwitch -= GAMESPEED
         self.room = list(self.room)
+
+        # Record what self.x, self.y, and self.room were at the start of this function.
         initialX = self.x
         initialY = self.y
-        xRoom = self.room[0]
-        yRoom = self.room[1]
+        oldRoom = self.room.copy()
 
+        # Execute the next block if self.cooldownPerRoomSwitch <= 0.
         if self.cooldownPerRoomSwitch <= 0:
+            # Set self.cooldownPerRoomSwitch and self.delay.
             self.cooldownPerRoomSwitch = 525
             self.spawnDelay = 50
-            xDis = target.room[0] - self.room[0]
-            yDis = target.room[1] - self.room[1]
-            self.movementCode = 'pass'
 
+            # Change self.room and go to the right edge of the new room.
             if axis == 'x':
                 if target.room[0] > self.room[0]:
                     self.x = width / 20
@@ -2276,21 +2338,29 @@ class foe:
                     self.y = height / 15
                     self.room[1] -= 1
 
+            # If self should not be where self is, execute the next block.
             if tuple(self.room) not in rooms.rooms.keys() or rooms.rooms[tuple(self.room)].isSafe:
-                self.room[0] = xRoom
-                self.room[1] = yRoom
+                # Set self.room, self.x, and self.y to what they were at the start of this function.
+                self.room = oldRoom
                 self.x = initialX
                 self.y = initialY
 
+            # Otherwise, update self.place and self.hitbox.
             else:
                 self.place.centerx = self.x
                 self.place.centery = self.y
                 self.hitbox.move(self.x - initialX, self.y - initialY)
 
     def getUpdate(self):
+        """Give self any attributes that self is missing. They may have been added after self was created."""
+        
+        # Create a foe of the same type as self.
         comparison = foe(self.type, 0, 0, [0, 0, 0])
+        
+        # Get a dictionary of the attributes of comparison.
         stats = vars(comparison)
 
+        # Give self any attributes that comparison has but self does not.
         for key in list(stats.keys()):
             if not hasattr(self, key):
                 self.__setattr__(key, stats[key])
