@@ -32,7 +32,7 @@ class environmentObject:
     
             case 'desertCaveLargeFlower':
                 self.sprite = 'desertCaveLargeFlower.png'
-                self.hp = 15
+                self.hp = float('inf')
                 self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
                                          item('lumis flower', 'desertCaveLittleFlower.png',
                                               qty=random.randint(5, 10)))
