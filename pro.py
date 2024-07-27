@@ -65,7 +65,7 @@ class player:
         self.mapShown = 0
         self.stamina = 100
         self.file = None
-        self.hpRect = pygame.Rect(width / 160, height / 58, width * 61 / 400 * self.hp / self.maxHp, height / 50)
+        self.hpRect = pygame.Rect(width / 160, height / 90, width * 61 / 400 * self.hp / self.maxHp, height * 9 / 450)
         self.bullets = []
         self.invincibility = 0
         self.speed = 1
@@ -91,6 +91,10 @@ class player:
         self.hpGoneSprite = plainSprite('hpGone.png', width * 33 / 400, height / 50)
         self.staminaBar = plainSprite("staminaBar.png", width * 33 / 400, height * 13 / 180)
         self.staminaGoneSprite = plainSprite("staminaGone.png", width * 33 / 400, height * 13 / 180)
+        self.potionSprites = [plainSprite('healthPotion.png', width / 25, height * 9 / 10),
+                              plainSprite('healthPotion.png', width * 3 / 25, height * 9 / 10)]
+        self.potionsFilledBar = plainSprite("potionFilledBar.png", width / 25, height * 71 / 90)
+        self.song = 'Crashed.mp3'
 
         for i in range(3):
             for j in range(10):
@@ -244,6 +248,8 @@ class player:
                                        timeBeforeStop=timeBeforeStop, piercing=piercing))
 
     def destroyFoes(self):
+        return
+
         for i in self.proRoom().foes:
             i.hp = 0
 
@@ -423,14 +429,15 @@ class player:
 
     def showInfo(self):
         draw(self.hpGoneSprite)
-        display.blit(pygame.transform.scale(IMAGES['hp.png'], (self.hpRect.width, self.hpRect.height)),
-                     self.hpRect)
+        display.fill("#f20cc6", self.hpRect)
         draw(self.hpBar)
-        staminaRect = pygame.Rect(width / 160, height * 56 / 900, width * 61 / 200000 * self.stamina, height / 50)
+        staminaRect = pygame.Rect(width / 160, height * 56 / 900, width * 31 / 100000 * self.stamina, height / 50)
         draw(self.staminaGoneSprite)
-        display.blit(pygame.transform.scale(IMAGES['stamina.png'], (staminaRect.width, staminaRect.height)),
-                     staminaRect)
+        display.fill("#10efe6", staminaRect)
         draw(self.staminaBar)
+
+        for i in range(self.potions):
+            draw(self.potionSprites[i])
 
         if self.proRoom().oxygenLoss:
             oxygenGoneRect = pygame.Rect(width / 100, height / 10, width / 100, height / 10)
@@ -445,8 +452,6 @@ class player:
                                            height * (60 - self.timeSincePressingSpace) / 300)
             display.fill("#1abdbd", totalTimeToSprintRect)
             display.fill("#cd300e", timeToSprintRect)
-
-
 
     def updateInventory(self):
         self.activeItem = self.inventory[self.activeItemSlot]
