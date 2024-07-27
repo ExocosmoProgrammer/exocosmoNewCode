@@ -11,7 +11,7 @@ class item:
         self.name = name
         self.place = IMAGES[self.sprite].get_rect(center=(-width, -height))
         self.hitbox = rect(pygame.Rect( -width, -height, width / 15, height * 3 / 80))
-        self.dragged = 0
+        self.dragged = False
         self.qty = qty
         self.stackSize = stackSize
 
