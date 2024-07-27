@@ -181,6 +181,7 @@ class world:
         roomWithMiniboss.difficulty = 0
         roomWithMiniboss.respawnsFoes = True
         roomWithMiniboss.isBossRoom = True
+        roomWithMiniboss.environmentObjects = []
         random.shuffle(biome)
 
         for i in [i for i in biome if i.difficulty <= -1]:
@@ -203,21 +204,25 @@ class world:
                 self.rooms[coord].background = 'topmostLumisLake.bmp'
                 self.rooms[coord].bottomYBoundary = height * 0.45
                 self.rooms[coord].oxygenLoss = 0
+                self.rooms[coord].calmSong = self.rooms[coord].combatSong = 'desertCaveLumisLakeAboveWater.mp3'
 
             elif coord[1] == bottomLumisLakeYCoord:
                 self.rooms[coord].background = 'bottommostLumisLake.bmp'
                 self.rooms[coord].yBoundaries = height * 0.55
                 self.rooms[coord].oxygenLoss = 0
+                self.rooms[coord].calmSong = self.rooms[coord].combatSong = 'desertCaveLumisLakeAboveWater.mp3'
 
             elif coord[0] == rightLumisLakeXCoord:
                 self.rooms[coord].background = 'rightmostLumisLake.bmp'
                 self.rooms[coord].leftXBoundary = width  * 0.33
                 self.rooms[coord].oxygenLoss = 0
+                self.rooms[coord].calmSong = self.rooms[coord].combatSong = 'desertCaveLumisLakeAboveWater.mp3'
 
             elif coord[0] == leftLumisLakeXCoord:
                 self.rooms[coord].background = 'leftmostLumisLake.bmp'
                 self.rooms[coord].rightXBoundary = width * 0.66
                 self.rooms[coord].oxygenLoss = 0
+                self.rooms[coord].calmSong = self.rooms[coord].combatSong = 'desertCaveLumisLakeAboveWater.mp3'
 
             else:
                 surfaceCoord = tuple(list(coord[:2]) + [9])
