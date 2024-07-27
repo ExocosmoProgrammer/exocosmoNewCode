@@ -9,15 +9,35 @@ from definitions import draw, drawToFullScreen, lesser, checkMouseCollision, loa
     greater, sign, pointDistance, percentChance, getPath, getDegrees, sqrt
 from droppedItem import droppedItem
 import random
-from variables import display, IMAGES, width, height, GAMESPEED, diagonal
+from variables import display, IMAGES, width, height, GAMESPEED, diagonal, relatedSongsDict
 from button import button
 from pro import player
 from temporaryAnimation import temporaryAnimation
 from bullets import bullet
 from foe import foe
 
+pygame.mixer.init()
+pygame.mixer.music.set_volume(1)
+
+
+def play(song, saveSong=True):
+    """Play song."""
+    global positionInSong
+
+    if song != pro.song:
+        pygame.mixer.music.load(f'music/{song}')
+        positionInSong = positionInSong if pro.song in relatedSongsDict.keys() and \
+                                           song in relatedSongsDict[pro.song] else 0
+        pygame.mixer.music.play(loops=-1, start=positionInSong)
+
+        if saveSong:
+            pro.song = song
+
+
 enemyBullets = []
+positionInSong = 0
 pro = player()
+play('littleFugue.mp3')
 startButton = button('whiteStartButton.png', width * 41 / 50, height * 7 / 12,
                      spriteWhenTouchingMouse='redStartButton.png')
 exitButton = button('whiteExitButton.png', width * 41 / 50, height * 17 / 24,
@@ -75,7 +95,7 @@ def load():
         pro.vr = 0
 
         for room in rooms.rooms.values():
-            room.getUpdate()
+            #room.getUpdate()
 
             for enemy in room.foes:
                 enemy.getUpdate()
@@ -88,6 +108,8 @@ def load():
 
 
 load()
+pygame.mixer.music.load(f'music/{pro.song}')
+pygame.mixer.music.play(-1)
 
 
 def proRoom():
@@ -247,7 +269,6 @@ def foeActions():
             else:
                 enemy.actAsFoe(pro, rooms, currentRoom)
                 enemyBullets += enemy.newBullets
-                print([i.sprite for i in enemyBullets])
                 currentRoom.foes += enemy.newFoes
                 enemy.newFoes = []
                 enemy.newBullets = []
@@ -293,22 +314,27 @@ def moveBullets():
 # one tick. I do this by returning one in the next function when something hurts the player.
 
 
+def checkCollisionWithPro(projectile):
+    if eval(projectile.checksCollisionWhen) and \
+            projectile.delay <= 0 and projectile.hitbox.checkCollision(pro.hitbox):
+        pro.hurt(projectile.damage)
+        projectile.piercing -= 1
+        exec(projectile.playerContactEffect)
+
+        if projectile.piercing < 0:
+            projectile.linger = 0
+
+        if projectile.impactAnimation is not None:
+            currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
+                                                                      projectile.x, projectile.y))
+
+        return 1
+
+
 def checkDamagingCollisionsToPro():
     if pro.invincibility <= 0:
         for projectile in enemyBullets:
-            if eval(projectile.checksCollisionWhen) and projectile.delay <= 0 and \
-                    projectile.hitbox.checkCollision(pro.hitbox):
-                pro.hurt(projectile.damage)
-                projectile.piercing -= 1
-                exec(projectile.playerContactEffect)
-
-                if projectile.piercing < 0:
-                    projectile.linger = 0
-
-                if projectile.impactAnimation is not None:
-                    currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
-                                                                              projectile.x, projectile.y))
-
+            if checkCollisionWithPro(projectile):
                 return 1
 
         for foe in currentRoom.foes:
@@ -321,6 +347,10 @@ def checkDamagingCollisionsToPro():
             if trap.hitbox.checkCollision(pro.hitbox):
                 pro.hurt(trap.damage)
                 return 1
+
+    else:
+        for projectile in [i for i in enemyBullets if i.alwaysChecksCollisionWithPro]:
+            checkCollisionWithPro(projectile)
 
 
 def checkDroppedItemCollisionsWithPro():
@@ -351,8 +381,8 @@ def checkTeleporterCollisionsWithPro():
                 roomSwitchingProcedure()
 
 
-def checkCollisionWithPro():
-    """checkCollisionWithPro() should check if things are colliding with the player."""
+def checkCollisionsWithPro():
+    """checkCollisionsWithPro() should check if things are colliding with the player."""
     checkDamagingCollisionsToPro()
     checkDroppedItemCollisionsWithPro()
     checkTeleporterCollisionsWithPro()
@@ -371,8 +401,8 @@ def checkCollisionsToFoes():
                             if pro.canRechargePotion:
                                 pro.potionRechargeProgress += projectile.damage
 
-                                if pro.potionRechargeProgress >= 100:
-                                    pro.potionRechargeProgress = 100
+                                if pro.potionRechargeProgress >= 40:
+                                    pro.potionRechargeProgress = 40
                                     pro.canRechargePotion = False
                                     pro.potions = lesser(pro.potions + 1, pro.maxPotions)
 
@@ -414,7 +444,7 @@ def checkCollisionsToEnvironmentObjects():
 
 def checkCollisions():
     """checkCollisions() checks collision for every case where collision needs to be checked."""
-    checkCollisionWithPro()
+    checkCollisionsWithPro()
     checkCollisionsToFoes()
     checkCollisionsToEnvironmentObjects()
 
@@ -424,7 +454,6 @@ def removeFoes():
     foes are gotten rid of."""
 
     for foe in currentRoom.foes:
-
         if foe.hp <= 0:
             while foe in currentRoom.foes:
                 currentRoom.foes.remove(foe)
@@ -447,6 +476,18 @@ def removeFoes():
                 if percentChance(thing[1]):
                     currentRoom.droppedItems.append(droppedItem(foe.x, foe.y, thing[0].sprite, thing[0].item))
 
+            if foe.specialSong is not None:
+                playSpecialSong = False
+
+                for enemy in proRoom().foes:
+                    if enemy.specialSong is not None:
+                        play(enemy.specialSong)
+                        playSpecialSong = True
+                        break
+
+                if not playSpecialSong:
+                    play(proRoom().combatSong if proRoom().foes else proRoom().calmSong)
+
             if not currentRoom.foes:
                 roomClearingProcedure()
 
@@ -463,6 +504,7 @@ def roomClearingProcedure():
                 foe.spawnDelay = 250
 
         except IndexError:
+            play(proRoom().calmSong)
             pro.hp = lesser(130, pro.hp + 40)
             pro.updateHpRect()
             currentRoom.foes = []
@@ -484,6 +526,7 @@ def roomClearingProcedure():
 
     else:
         currentRoom.foesUponRespawn = []
+        play(proRoom().calmSong)
         save()
 
     if currentRoom.isBossRoom and not currentRoom.foes:
@@ -539,6 +582,17 @@ def roomSwitchingProcedure():
 
         spot.spawnResourcesFromRoomSwitch()
 
+    if currentRoom.foes:
+        play(currentRoom.combatSong)
+
+    else:
+        play(currentRoom.calmSong)
+
+    for enemy in currentRoom.foes:
+        if enemy.specialSong is not None:
+            play(enemy.specialSong)
+            break
+
     save()
 
 
@@ -589,6 +643,9 @@ def runGame():
     passiveCritterActions()
     currentRoom.action()
 
+    if pro.song == proRoom().calmSong and proRoom().foes:
+        play(proRoom().combatSong)
+
     if initialRoom != currentRoom:
         roomSwitchingProcedure()
 
@@ -629,12 +686,15 @@ def respawn():
     pro.aggressiveFoes = []
     enemyBullets = []
     pro.bullets = []
+    play('Crashed.mp3')
 
 
 while True:
     while pro.hp > -float('0'):
         try:
-            time.sleep(greater(0.0381 - runGame().seconds, 0))
+            timeTaken = runGame().seconds
+            positionInSong += greater(timeTaken, 1 / 27)
+            time.sleep(greater(1 / 27 - timeTaken, 0))
 
         except KeyboardInterrupt:
             pro.hr = 0
