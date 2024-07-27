@@ -9,15 +9,18 @@ class bullet:
     def __init__(self, hr, vr, damage, sprite, x, y, animation=None,
                  linger=1600, piercing=0, rotation=None, dissappearsAtEdges=1, checksCollisionWhen='True',
                  endEffect='pass', causeAndEffect={}, bounces=0, delay=0, delayedSprite='hellhoundFootstep.png',
-                 durationBasedPlace=None, durationBasedMovement=None, delayedAnimation=None, consistentPoint='center',
+                 durationBasedPlace=None, durationBasedMovement=None, delayedAnimation=None,
                  polarDurationBasedPlace=None, polarMovement=None, radius=0, theta=0, impactAnimation=None,
-                 timeBeforeStop=1600, playerContactEffect = 'pass', **extra):
+                 timeBeforeStop=1600, playerContactEffect = 'pass', alwaysChecksCollisionWithPro=False, **extra):
         self.hr = hr
         self.vr = vr
         self.damage = damage
         self.timeBeforeStop = timeBeforeStop
         self.sprite = sprite
         self.dissappearsAtEdges = dissappearsAtEdges
+
+        # If self.alwaysChecksCollisionWithPro, self checks collision with pro even when pro.invincibility > 0.
+        self.alwaysChecksCollisionWithPro = alwaysChecksCollisionWithPro
 
         # self can only detect collision when the eval of self.checksCollisionWhen is True.
         self.checksCollisionWhen = checksCollisionWhen
@@ -36,7 +39,6 @@ class bullet:
         self.placeByDuration = durationBasedPlace
         self.movementByDuration = durationBasedMovement
         self.initialDelay = self.delay
-        self.consistentPoint = consistentPoint
         self.polarDurationBasedPlace = polarDurationBasedPlace
         self.polarMovement = polarMovement
         self.y = y
