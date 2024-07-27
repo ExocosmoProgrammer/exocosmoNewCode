@@ -161,7 +161,7 @@ def getPath(speed, a, b):
 
 
 def getPartiallyRandomPath(speed, a, b, angleVariationDegreeInt):
-    """getPath(x, y, z, a) returns a list of the horizontal and vertical movement of a projectile that
+    """getPartiallyRandomPath(x, y, z, a) returns a list of the horizontal and vertical movement of a projectile that
        is starting with a center at point y and headed at a random angle that is withing a degrees of the
        angle that is from point y to point z while moving at x units per frame."""
 
