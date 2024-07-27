@@ -63,12 +63,14 @@ class foe:
                    'desertCaveSmallFly': self.actAsDesertCaveSmallFly,
                    'desertCaveLargeFly': self.actAsDesertCaveLargeFly, 'desertCaveSpider': self.actAsDesertCaveSpider,
                    'desertCaveMoth': self.actAsDesertCaveMoth, 'desertCaveFlyMiniboss': self.actAsDesertCaveFlyMiniboss,
-                   'scary': self.actAsScary, 'scaryBubble': self.actAsScaryBubble}
+                   'scary': self.actAsScary}
 
         # Self will call the function that will be determined by actions[self.type] until self notices the player.
         wanderingMethods = {'brokenTurret': skip, 'flamingRobot': skip, 'robotBodyguard': skip,
-                            'tougherShipMiniboss': skip, 'hellhound': skip, 'desertCaveLargeFly': skip,
-                            'desertCaveSmallFly': skip, 'desertCaveFlyMiniboss': skip}
+                            'tougherShipMiniboss': skip, 'hellhound': skip,
+                            'desertCaveLargeFly': self.progressAnimation,
+                            'desertCaveSmallFly': self.progressAnimation,
+                            'desertCaveFlyMiniboss': self.progressAnimation}
 
         # Continue initializing attributes. self.wanderingMethod defaults to being self.actAsGenericWanderingFoe
         try:
@@ -85,6 +87,9 @@ class foe:
         self.turnCooldownWhileWandering = 0
         self.initialRoom = list(self.room).copy()
         self.loot = []
+
+        # self.specialSong determines what, if any, any special song should play when self is around.
+        self.specialSong = None
 
         match name:
             case 'brokenTurret':
@@ -169,7 +174,7 @@ class foe:
                 self.loot = [[droppedItem(self.x, self.y, 'lumisInInventory.png',
                                           item('lumis', 'lumisInInventory.png',
                                                qty=random.randint(1, 2))), 100]]
-    
+
             case 'desertCaveSmallFly':
                 self.hp = 1
                 self.damage = 20
@@ -215,12 +220,14 @@ class foe:
                 self.movementCode = 'pass'
                 self.t = 0
                 self.deltaTSign = -1
+                self.summonCooldown = 0
                 self.thirdFireCooldown = float('inf')
                 self.fourthFireCooldown = 0
                 self.mode = 'summoning'
                 self.summonsNext = False
                 self.showsHp = True
                 self.locksRoomOnAggression = True
+                self.specialSong = 'motherFly.mp3'
     
             case 'tougherShipMiniboss':
                 self.hp = 500
@@ -292,14 +299,6 @@ class foe:
                 self.theta = 0
                 self.acted = False
 
-            case 'scaryBubble':
-                self.sprite = 'nanotechRevolverBulletImpactFrame1.png'
-                self.hp = float('inf')
-                self.damage = 0
-                self.vr = -1
-                self.hr = 0
-                self.goesThroughObjects = True
-
         if hasattr(self, 'animation'):
             self.idleAnimation = self.animation.copy()
 
@@ -314,7 +313,7 @@ class foe:
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
 
-    def progressAnimation(self):
+    def progressAnimation(self, *args):
         """Update self's sprite."""
 
         # Update self.animationFrame
@@ -371,71 +370,6 @@ class foe:
         self.place.centerx = self.x
         self.place.centery = self.y
         self.hitbox.getEnds()
-
-    def moveWithPotentialToSwitchRooms(self, rooms):
-        """This function is no longer in use and should be deleted."""
-
-        # TODO Delete this function.
-        self.moveWithoutWallCollision()
-        roomSwitchDirections = []
-
-        if self.hitbox.left < 0:
-            self.place.right = width
-            self.hitbox.move(width - self.hitbox.right, 0)
-            self.room[0] -= 1
-            roomSwitchDirections += ['left']
-            self.spawnDelay = 250
-
-        elif self.hitbox.right > width:
-            self.place.left = 0
-            self.hitbox.move(-self.hitbox.left, 0)
-            self.room[0] += 1
-            roomSwitchDirections += ['right']
-            self.spawnDelay = 250
-
-        if self.hitbox.top < self.yBoundary:
-            self.place.bottom = height
-            self.hitbox.move(0, height - self.hitbox.bottom)
-            self.room[1] += 1
-            roomSwitchDirections += ['top']
-            self.spawnDelay = 250
-
-        elif self.hitbox.bottom > height:
-            self.place.top = 0
-            self.hitbox.move(0, -self.hitbox.top)
-            self.room[1] -= 1
-            roomSwitchDirections += ['bottom']
-            self.spawnDelay = 250
-
-        self.x = self.place.centerx
-        self.y = self.place.centery
-        self.hitbox.updatePoints()
-
-        if tuple(self.room) not in list(rooms.rooms.keys()):
-            if 'left' in roomSwitchDirections:
-                self.place.left = 0
-                self.hitbox.move(-self.hitbox.left, 0)
-                self.room[0] += 1
-
-            if 'right' in roomSwitchDirections:
-                self.place.right = width
-                self.hitbox.move(width - self.hitbox.right, 0)
-                self.room[0] -= 1
-
-            if 'top' in roomSwitchDirections:
-                self.place.top = 0
-                self.hitbox.move(0, -self.hitbox.top)
-                self.room[1] -= 1
-
-            if 'bottom' in roomSwitchDirections:
-                self.place.bottom = height
-                self.hitbox.move(0, height - self.hitbox.bottom)
-                self.room[1] += 1
-
-            self.hitbox.getEnds()
-            self.x = self.place.centerx
-            self.y = self.place.centery
-            return 1
 
     def moveNormally(self, *args):
         """Make self move and stay in boundaries. Return True if self hit the boundaries. Otherwise, return False."""
@@ -667,7 +601,6 @@ class foe:
         path = getPath(radius * 2, (self.x, self.y), (target.x, target.y))
         destinationPoint = (self.x + path[0], self.y + path[1])
         self.t = -getRadians((self.x - destinationPoint[0]), (self.y - destinationPoint[1]))
-        self.altFireCooldown = 600
         self.movementCode = (f'self.x, self.y = {radius} * math.cos(self.t) + (self.x + {destinationPoint[0]}) / 2 '
                              f'+ {self.x - (radius * math.cos(self.t) + (self.x + destinationPoint[0]) / 2)}, '
                              f'{radius} * math.sin(self.t) + (self.y + {destinationPoint[1]}) / 2 + '
@@ -675,7 +608,7 @@ class foe:
         self.deltaTSign = 1 if (self.y > height / 2 and self.x < target.x) or \
                                (self.y < height / 2 and self.x > target.x) else -1
 
-    def actAsDesertCaveMoth(self, target, *args):
+    def actAsDesertCaveMoth(self, target, room, *args):
         """This function should be used by desert cave moths on each turn of theirs."""
 
         # Reduce cooldowns.
@@ -690,6 +623,11 @@ class foe:
 
         # Update self.t. self.t will be used to calculate self.x and self.y.
         self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
+
+        for thing in room.environmentObjects:
+            if thing.hitbox.checkCollision(self.hitbox):
+                self.deltaTSign *= -1
+                self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
 
         # If self.fireCooldown <= 0, fire a cluster of projectiles and set self.fireCooldown.
         if self.fireCooldown <= 0:
@@ -781,7 +719,6 @@ class foe:
         # Progress self's animation.
         self.progressAnimation()
 
-
         # Define a class, point, to hold attriubtes called x and y. The point class lets self more easily target
         # projectiles at points other than the player's center.
         class point:
@@ -794,24 +731,28 @@ class foe:
             # Set self.vr to 0. It is important to do so so that self stops moving up at the end of the slam attack.
             self.vr = 0
 
+            # Decrease self.summonCooldown.
+            self.summonCooldown -= 1
+
             # Set self.fireCooldown to 0.
             self.fireCooldown = 0
 
-            # Modify self.mode. Self should use attacks in the order summon, move, other, move.
+            # Modify self.mode.
             if self.mode == 'moving':
-                if self.summonsNext:
+                self.altFireCooldown = 1199
+
+                if self.summonCooldown <= 0:
                     self.mode = 'summoning'
                     self.summonsNext = False
+                    self.summonCooldown = 8
 
                 else:
                     self.mode = random.choice(['slam', 'laser', 'spit'])
                     self.summonsNext = True
 
             else:
+                self.altFireCooldown = 299
                 self.mode = 'moving'
-
-            # Set self.altFireCooldown.
-            self.altFireCooldown = 599 if self.mode == 'moving' else 1199
 
         # Enact the proper procedure based on self.mode.
         if self.mode == 'moving':
@@ -819,12 +760,12 @@ class foe:
             exec(self.movementCode)
 
             # Modify self.t.
-            self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
+            self.t += math.pi / 300 * self.deltaTSign * GAMESPEED
 
             # If self.fireCooldown <= 0, set self.movementCode and self.fireCooldown.
             if self.fireCooldown <= 0:
                 self.setMovementInSemicircleTowardsTarget(target, width / 20)
-                self.fireCooldown = 600
+                self.fireCooldown = 300
 
         elif self.mode == 'slam':
             # Make self move. Self may move up and down if self.mode == 'slam'.
@@ -904,14 +845,14 @@ class foe:
 
             if self.fireCooldown <= 0:
                 self.animation = [f'desertCaveFlyMinibossSpit{i}.png' for i in range(1, 19) for j in range(66)]
-                self.fireCooldown = float('inf')
+                self.fireCooldown = 1200
                 self.thirdFireCooldown = 396
 
             if self.thirdFireCooldown <= 0:
                 # Fire two projectiles that, with self, form an angle that a vertical line through self.x bisects.
                 self.basicSpreadShot(2, (self.fireCooldown - 804) * math.pi / 201,
                                      pointUsed, 6, 'desertCaveFlyMinibossLargeProjectile1.png', 60,
-                                     animation=[f'desertCaveFlyMinibossLargeProjectile{i}.png' for i in range(1, 19) \
+                                     animation=[f'desertCaveFlyMinibossLargeProjectile{i}.png' for i in range(1, 6) \
                                                 for j in range(60)])
 
                 # Set self.thirdFireCooldown.
@@ -929,6 +870,7 @@ class foe:
 
         for i in range(qty):
             angle = radians - totalAngle / 2 + indivisualAngle * i
+
             # Fire a projectile.
             self.newBullets.append(bullet(math.cos(angle) * speed, math.sin(angle) * speed,
                                               damage, sprite, center[0], center[1], **kwargs))
@@ -1626,20 +1568,6 @@ class foe:
                                                                        'hellhoundDisguiseFire.png', 26,
                                                                        417, height * 4 / 25)
 
-                        if False:
-                            xInterval = int(width / 7)
-                            yInterval = int((height - self.yBoundary) / 7)
-                            minX = int(width / 7)
-                            minY = int(height / 7)
-
-                            for i in range(5):
-                                for j in range(5):
-                                    self.createStillBulletRandomlyInSpace(i * xInterval + minX, (i + i) * xInterval + minX,
-                                                                          j * yInterval + self.yBoundary + minY,
-                                                                          (j + 1) * yInterval + self.yBoundary + minY,
-                                                                          'hellhoundDisguiseFire.png', 26,
-                                                                          417)
-
                         # Set self.delaySprite so that self will be invisible while delayed.
                         self.delaySprite = 'invisiblePixels.png'
 
@@ -2144,10 +2072,12 @@ class foe:
 
         # If self.modeDuration <= 0, execute the following block.
         if self.modeDuration <= 0:
-            # Fire a harmless bullet that replenishes oxygen upon colliding with target.
-            self.newBullets.append(bullet(0, 0.5, 0, 'nanotechRevolverBulletImpactFrame1.png',
-                                          self.x, self.y,
-                                          playerContactEffect='pro.oxygen = lesser(pro.maxOxygen, pro.oxygen + 7)'))
+            # Fire a harmless bullet that replenishes oxygen and goes away upon colliding with target.
+            self.newBullets.append(bullet(0, -0.2, 0, 'nanotechRevolverBulletImpactFrame1.png',
+                                          self.x, self.y, piercing=float('inf'),
+                                          playerContactEffect='pro.oxygen = lesser(pro.maxOxygen, pro.oxygen + 7); '
+                                                              'projectile.linger = 0',
+                                          alwaysChecksCollisionWithPro=True))
 
             # If not self.aggressive and self is not investigating, execute the next block.
             if self.mode != 'investigating' and not self.aggressive:
@@ -2204,19 +2134,6 @@ class foe:
                         self.animation = self.searchAnimation.copy()
                         self.animationFrame = 0
 
-    def actAsScaryBubble(self, target, *args):
-        """This function should never be used."""
-
-        # TODO delete this.
-        self.moveWithoutWallCollision()
-
-        if self.hitbox.checkCollision(target.hitbox):
-            target.oxygen = lesser(target.maxOxygen, target.oxygen + 8)
-            self.hp = 0
-
-        elif self.hitbox.bottom < 0:
-            self.hp = 0
-
     def actAsGenericWanderingFoe(self, rooms, *args):
         """This function is the default function for foes to use while wandering."""
 
@@ -2263,7 +2180,7 @@ class foe:
             oldX = self.x
             oldY = self.y
 
-            # Perform the
+            # Perform the proper action for self.
             self.action(target, room, *args)
 
             # Make self.place to be centered around self.x, self.y
@@ -2272,6 +2189,7 @@ class foe:
             # If self.hasFullHitbox, execute the next block.
             if self.hasFullHitbox:
                 # Set self.hitbox. If self.rotated, self's hitbox should be rotated.
+
                 if self.rotated:
                     self.hitbox = rect(IMAGES[self.sprite].get_rect(center=(self.x, self.y)), -self.angle)
 
@@ -2303,6 +2221,10 @@ class foe:
 
     def chaseThroughRooms(self, target, axis, rooms, *args):
         """Chase the player through rooms."""
+
+        if hasattr(self, 'movementCode'):
+            # self.movementCode should be repeatedly executed to move self.
+            self.movementCode = 'pass'
 
         # Reduce self.cooldownPerRoomSwitch.
         self.cooldownPerRoomSwitch -= GAMESPEED
@@ -2353,10 +2275,10 @@ class foe:
 
     def getUpdate(self):
         """Give self any attributes that self is missing. They may have been added after self was created."""
-        
+
         # Create a foe of the same type as self.
         comparison = foe(self.type, 0, 0, [0, 0, 0])
-        
+
         # Get a dictionary of the attributes of comparison.
         stats = vars(comparison)
 
