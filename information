@@ -25,3 +25,5 @@ other parameters, the method should use the following indented code
         exec(f'self.{stat} = extra[stat]'))
 
 or some other code to an identical effect.
+
+I may use the term projectile to refer to any member of the bullet class.
