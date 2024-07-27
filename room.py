@@ -60,6 +60,9 @@ class room:
                         self.maxResources = 0
 
                     case -1:
+                        self.calmSong = 'desertCaveCalm.mp3'
+                        self.combatSong = 'desertCaveCombatLayer1.mp3'
+
                         if coordinate == [0, 6, -1]:
                             self.yBoundaries = height * 543 / 900
                             self.leftXBoundary = width * 37 / 128
@@ -100,6 +103,7 @@ class room:
                 self.respawnsFoes = True
                 self.usuallyLocks = True
                 self.background = 'shipBackgroundWithDoor.bmp'
+                self.calmSong = self.combatSong = 'Crashed.mp3'
 
             case 'desertCaveForest':
                 self.difficulty = -2
@@ -111,6 +115,7 @@ class room:
                 self.plainSprites = []
                 self.damagingTraps = []
                 self.addsResources = False
+                self.calmSong = self.combatSong = 'lumisForest.mp3'
 
                 for i in range(70):
                     try:
@@ -155,10 +160,13 @@ class room:
                         self.locks = True
                         self.usuallyLocks = True
                         self.respawnsFoes = True
+                        self.calmSong = 'desertCaveLumisLakeUnderwater.mp3'
+                        self.combatSong = 'desertCaveLumisLakeUnderwater.mp3'
 
                     case 9:
                         self.background = 'desertCaveLumisLakeSurfaceRoom.bmp'
                         self.disconnected = True
+                        self.calmSong = self.combatSong = 'desertCaveLumisLakeAboveWater.mp3'
 
         try:
             self.action = roomActions[(self.biome, self.coordinate[2])]
