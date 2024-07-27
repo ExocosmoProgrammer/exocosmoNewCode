@@ -90,9 +90,19 @@ plainSpritesPerBiome = {('desert', -1): ['desertCaveLumisFern.png',
 notRespawningEnvironmentObjectsPerBiome = {('desert', -1): ['desertCaveLumisTree'],
                                            ('desertCaveForest', -1): ['desertCaveLumisTree']}
 recipes = {tuple(sorted(['moth dust'] * 5 + ['lumis'] * 50)):
-               ('item("lumisFlamethrower", "basicSpreadInInventory.png", "The lumis flamethrower fires a shot.", '
+               ('item("lumisFlamethrower", "basicSpreadInInventory.png", "The lumis flamethrower fires projectiles.", '
                 'stackSize=1)')}
 playerHeight = height * 4 / 45
 environmentObjectLayoutsPerBiome = {('desertCaveLumisLake', -1): ['[environmentObject("desertCaveLargeFlower", '
                                                                   'width * i / 4, height * j / 4) for i in [1, 3] '
                                                                   'for j in [1, 3]]']}
+calmMusicPerBiome = {('ship', 10): 'Crashed.mp3', ('desert', -1): 'DesertCaveCalm.mp3'}
+combatMusicPerBiome = {('ship', 10): 'Crashed.mp3', ('desert', -1): 'DesertCaveCombatLayer1.mp3'}
+relatedSongs = [['desertCaveLumisLakeAboveWater', 'desertCaveLumisLakeUnderwater'],
+                ['lumisForest.mp3', 'desertCaveCalm.mp3']]
+relatedSongsDict = {}
+
+for i in relatedSongs:
+    for j in i:
+        relatedSongsDict[j] = [song for song in i if song != j]
+
