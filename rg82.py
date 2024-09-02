@@ -3,30 +3,121 @@ import sys
 import time
 import datetime
 import pygame
-import proFile
-import worldFile
 import copy
 
 from definitions import draw, drawToFullScreen, lesser, checkMouseCollision, loadWithPickle, saveWithPickle,\
-    greater, sign, pointDistance, percentChance
+    greater, sign, pointDistance, percentChance, getPath, getDegrees, sqrt
 from droppedItem import droppedItem
 import random
-from proFile import pro
-from variables import display, IMAGES, width, height, GAMESPEED, diagonal
+from variables import display, IMAGES, width, height, GAMESPEED, diagonal, relatedSongsDict
 from button import button
-from bullets import bullet
-from worldFile import rooms
-from word import word
-from textBox import textBox
+from pro import player
 from temporaryAnimation import temporaryAnimation
-from plainSprites import plainSprite
+from bullets import bullet
+from foe import foe
+
+pygame.mixer.init()
+pygame.mixer.music.set_volume(1)
+
+
+def play(song, saveSong=True):
+    """Play song."""
+    global positionInSong
+
+    if song != pro.song:
+        pygame.mixer.music.load(f'music/{song}')
+        positionInSong = positionInSong if pro.song in relatedSongsDict.keys() and \
+                                           song in relatedSongsDict[pro.song] else 0
+        pygame.mixer.music.play(loops=-1, start=positionInSong)
+
+        if saveSong:
+            pro.song = song
+
 
 enemyBullets = []
+positionInSong = 0
+pro = player()
+play('littleFugue.mp3')
+startButton = button('whiteStartButton.png', width * 41 / 50, height * 7 / 12,
+                     spriteWhenTouchingMouse='redStartButton.png')
+exitButton = button('whiteExitButton.png', width * 41 / 50, height * 17 / 24,
+                    spriteWhenTouchingMouse='redExitButton.png')
+save1Button = button('whiteSave1Button.png', width * 41 / 50, height * 9 / 16,
+                     spriteWhenTouchingMouse='redSave1Button.png')
+save2Button = button('whiteSave2Button.png', width * 41 / 50, height * 11 / 16,
+                     spriteWhenTouchingMouse='redSave2Button.png')
+save3Button = button('whiteSave3Button.png', width * 41 / 50, height * 13 / 16,
+                     spriteWhenTouchingMouse='redSave3Button.png')
+menu = 'title'
+
+file = None
+
+while file is None:
+    drawToFullScreen('exocosmoNewTitleScreen.bmp')
+
+    if menu == 'title':
+        startButton.drawingMethod()
+        exitButton.drawingMethod()
+
+        if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
+
+            if checkMouseCollision(startButton.hitbox):
+                menu = 'saveSelection'
+
+            elif checkMouseCollision(exitButton.hitbox):
+                assert False
+
+    elif menu == 'saveSelection':
+        for i in range(1, 4):
+            exec(f'save{i}Button.drawingMethod()')
+
+        if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
+            for i in range(1, 4):
+                exec(f"if checkMouseCollision(save{i}Button.hitbox): file = {i}")
+
+    pygame.event.pump()
+    pygame.display.flip()
+
+
+def load():
+    """load() should load the player's saved data."""
+    global pro, rooms
+
+    try:
+        newRooms = pro.loadRooms(file)
+
+        if newRooms is not None:
+            rooms = newRooms
+
+        pro = loadWithPickle(f'playerSave{file}.pickle')
+        pro.aggressiveFoes = []
+        pro.hr = 0
+        pro.vr = 0
+
+        for room in rooms.rooms.values():
+            #room.getUpdate()
+
+            for enemy in room.foes:
+                enemy.getUpdate()
+
+        pro.getUpdate()
+
+    except FileNotFoundError or EOFError:
+        rooms = pro.resetRooms()
+        pro = player()
+
+
+load()
+pygame.mixer.music.load(f'music/{pro.song}')
+pygame.mixer.music.play(-1)
 
 
 def proRoom():
     """proRoom() returns the room that the player is in."""
     return rooms.rooms[tuple(pro.room)]
+
+
+currentRoom = proRoom()
 
 
 def getNearbyFoes():
@@ -43,9 +134,6 @@ def getNearbyFoes():
     return foes
 
 
-currentRoom = proRoom()
-
-
 def save():
     """save() should save the game."""
     if True:
@@ -53,38 +141,8 @@ def save():
         saveWithPickle(f'worldSave{file}.pickle', rooms)
 
 
-def load():
-    """load() should load the player's saved data."""
-    global pro, rooms
-
-    try:
-        newRooms = pro.loadRooms(file)
-
-        if newRooms is not None:
-            rooms = newRooms
-
-        pro = loadWithPickle(f'playerSave{file}.pickle')
-        worldFile.load(file)
-        proFile.load(file)
-        pro.aggressiveFoes = []
-        pro.hr = 0
-        pro.vr = 0
-
-        for room in rooms.rooms.values():
-            room.getUpdate()
-
-            for enemy in room.foes:
-                enemy.getUpdate()
-
-        pro.getUpdate()
-
-    except FileNotFoundError or EOFError:
-        rooms = pro.resetRooms()
-        pro = proFile.reset()
-
-
 def drawGame():
-    """drawGame() draws every sprite and flips the display."""
+    """drawGame() draws most sprites."""
     if not pro.mapShown:
         drawToFullScreen(currentRoom.background)
 
@@ -95,11 +153,11 @@ def drawGame():
             draw(sprite)
 
         for member in currentRoom.teleporters:
+            member.functionToGetSprite(pro, currentRoom.locks and currentRoom.foes)
             draw(member)
 
         for trap in currentRoom.damagingTraps:
-            trap.progressAnimation()
-            draw(trap)
+            trap.drawingMethod()
 
         for item in currentRoom.droppedItems:
             draw(item)
@@ -121,22 +179,29 @@ def drawGame():
                 else:
                     draw(enemy)
 
+                for debuff in enemy.debuffs:
+                    display.blit(IMAGES[debuff.sprite], enemy.place)
+
             else:
+                if hasattr(enemy, 'delayAnimation'):
+                    enemy.delayFrame += GAMESPEED
+
+                    if int(enemy.delayFrame) > len(enemy.delayAnimation) - 1:
+                        enemy.delayFrame = 0
+
+                    enemy.delaySprite = enemy.delayAnimation[enemy.delayFrame]
+                    enemy.place = IMAGES[enemy.delaySprite].get_rect(center=(enemy.x, enemy.y))
+
                 display.blit(IMAGES[enemy.delaySprite], enemy.place)
 
-        for projectile in pro.bullets:
+        for projectile in pro.bullets + enemyBullets:
             if projectile.delay <= 0:
                 draw(projectile, projectile.rotation)
 
             else:
                 display.blit(IMAGES[projectile.getSpriteWhenDelayed()], projectile.place)
 
-        for projectile in enemyBullets:
-            if projectile.delay <= 0:
-                draw(projectile, projectile.rotation)
-
-            else:
-                display.blit(IMAGES[projectile.getSpriteWhenDelayed()], projectile.place)
+            projectile.hitbox.showCollision(pro.hitbox)
 
         for obj in currentRoom.environmentObjects:
             if obj.place.bottom > pro.place.bottom:
@@ -155,29 +220,22 @@ def drawGame():
         if pro.inventoryShown:
             pro.showInventory()
 
+        pro.showHotbar()
+
         pro.showInfo()
 
     else:
         pro.showMap()
-
-    pygame.display.flip()
 
 
 def foeActions():
     """foeActions() should make foes act."""
     global enemyBullets
 
-    for enemy in getNearbyFoes():
+    for enemy in currentRoom.foes:
         if enemy not in pro.aggressiveFoes:
             if enemy.spawnDelay <= 0:
-                try:
-                    rooms.rooms[tuple(enemy.room)].foes.remove(enemy)
-
-                except ValueError:
-                    pass
-
                 enemy.wanderingMethod(rooms)
-                rooms.rooms[tuple(enemy.room)].foes.append(enemy)
 
                 if pointDistance((enemy.x, enemy.y), (pro.x, pro.y)) <= \
                         enemy.aggressionRadius * diagonal / 1836 and enemy in currentRoom.foes:
@@ -185,7 +243,6 @@ def foeActions():
 
                     if enemy.locksRoomOnAggression:
                         proRoom().locks = True
-
 
             else:
                 enemy.spawnDelay -= GAMESPEED
@@ -215,7 +272,11 @@ def foeActions():
                     rooms.rooms[tuple(enemy.room)].foes.append(enemy)
 
             else:
-                enemy.actAsFoe(pro, rooms)
+                # Make enemy to attack pro if the enemy's target was not pro and is dead.
+                if enemy.unusualTarget is not None and enemy.unusualTarget.hp <= 0:
+                    enemy.unusualTarget = None
+
+                enemy.actAsFoe(pro, rooms, currentRoom)
                 enemyBullets += enemy.newBullets
                 currentRoom.foes += enemy.newFoes
                 enemy.newFoes = []
@@ -262,21 +323,27 @@ def moveBullets():
 # one tick. I do this by returning one in the next function when something hurts the player.
 
 
+def checkCollisionWithPro(projectile):
+    if eval(projectile.checksCollisionWhen) and \
+            projectile.delay <= 0 and projectile.hitbox.checkCollision(pro.hitbox):
+        pro.hurt(projectile.damage)
+        projectile.piercing -= 1
+        exec(projectile.playerContactEffect)
+
+        if projectile.piercing < 0:
+            projectile.linger = 0
+
+        if projectile.impactAnimation is not None:
+            currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
+                                                                      projectile.x, projectile.y))
+
+        return 1
+
+
 def checkDamagingCollisionsToPro():
     if pro.invincibility <= 0:
         for projectile in enemyBullets:
-            if eval(projectile.checksCollisionWhen) and projectile.delay <= 0 and \
-                    projectile.hitbox.checkCollision(pro.hitbox):
-                pro.hurt(projectile.damage)
-                projectile.piercing -= 1
-
-                if projectile.piercing < 0:
-                    projectile.linger = 0
-
-                if projectile.impactAnimation is not None:
-                    currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
-                                                                              projectile.x, projectile.y))
-
+            if checkCollisionWithPro(projectile):
                 return 1
 
         for foe in currentRoom.foes:
@@ -289,6 +356,10 @@ def checkDamagingCollisionsToPro():
             if trap.hitbox.checkCollision(pro.hitbox):
                 pro.hurt(trap.damage)
                 return 1
+
+    else:
+        for projectile in [i for i in enemyBullets if i.alwaysChecksCollisionWithPro]:
+            checkCollisionWithPro(projectile)
 
 
 def checkDroppedItemCollisionsWithPro():
@@ -319,11 +390,40 @@ def checkTeleporterCollisionsWithPro():
                 roomSwitchingProcedure()
 
 
-def checkCollisionWithPro():
-    """checkCollisionWithPro() should check if things are colliding with the player."""
+def checkCollisionsWithPro():
+    """checkCollisionsWithPro() should check if things are colliding with the player."""
     checkDamagingCollisionsToPro()
     checkDroppedItemCollisionsWithPro()
     checkTeleporterCollisionsWithPro()
+
+
+def checkCollisionWithFoe(projectile, foe):
+    if eval(projectile.checksCollisionWhen) and foe.spawnDelay <= 0 and foe.hp > 0 and \
+            projectile.hitbox.checkCollision(foe.hitbox):
+        if foe.shieldedBy not in currentRoom.foes:
+            foe.hp -= projectile.damage
+            exec(projectile.foeContactEffect)
+
+            # Give desired debuffs to foe.
+            for debuff in projectile.debuffInflictions:
+                foe.debuffs.append(copy.copy(debuff))
+
+            if pro.canRechargePotion:
+                pro.potionRechargeProgress += projectile.damage
+
+                if pro.potionRechargeProgress >= 40:
+                    pro.potionRechargeProgress = 40
+                    pro.canRechargePotion = False
+                    pro.potions = lesser(pro.potions + 1, pro.maxPotions)
+
+        projectile.piercing -= 1
+
+        if projectile.piercing < 0:
+            projectile.linger = 0
+
+            if projectile.impactAnimation is not None:
+                currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
+                                                                          projectile.x, projectile.y))
 
 
 def checkCollisionsToFoes():
@@ -335,6 +435,19 @@ def checkCollisionsToFoes():
                     if projectile.hitbox.checkCollision(foe.hitbox):
                         if foe.shieldedBy not in currentRoom.foes:
                             foe.hp -= projectile.damage
+                            exec(projectile.foeContactEffect)
+
+                            # Give desired debuffs to foe.
+                            for debuff in projectile.debuffInflictions:
+                                foe.debuffs.append(copy.copy(debuff))
+
+                            if pro.canRechargePotion:
+                                pro.potionRechargeProgress += projectile.damage
+
+                                if pro.potionRechargeProgress >= 40:
+                                    pro.potionRechargeProgress = 40
+                                    pro.canRechargePotion = False
+                                    pro.potions = lesser(pro.potions + 1, pro.maxPotions)
 
                         projectile.piercing -= 1
 
@@ -345,7 +458,7 @@ def checkCollisionsToFoes():
                                 currentRoom.temporaryAnimations.append(temporaryAnimation(projectile.impactAnimation,
                                                                                           projectile.x, projectile.y))
 
-                        break
+                            break
 
 
 def checkCollisionsToEnvironmentObjects():
@@ -372,11 +485,24 @@ def checkCollisionsToEnvironmentObjects():
                                                                                   projectile.x, projectile.y))
 
 
+def checkUnusualCollisions():
+    """Check collisions that are not checked by any other function. This can be necessary if projectiles check
+    collision with unusual targets, for example, when foes fire at each other."""
+
+    for bullet in enemyBullets + pro.bullets:
+        for target in bullet.unusualTargets:
+            if target == pro and pro.invincibility <= 0:
+                checkCollisionWithPro(bullet)
+
+            elif type(target) is foe:
+                checkCollisionWithFoe(bullet, target)
+
 def checkCollisions():
     """checkCollisions() checks collision for every case where collision needs to be checked."""
-    checkCollisionWithPro()
+    checkCollisionsWithPro()
     checkCollisionsToFoes()
     checkCollisionsToEnvironmentObjects()
+    checkUnusualCollisions()
 
 
 def removeFoes():
@@ -384,8 +510,10 @@ def removeFoes():
     foes are gotten rid of."""
 
     for foe in currentRoom.foes:
-
         if foe.hp <= 0:
+            for debuff in foe.debuffs:
+                exec(debuff.effectUponEnding)
+
             while foe in currentRoom.foes:
                 currentRoom.foes.remove(foe)
 
@@ -407,6 +535,18 @@ def removeFoes():
                 if percentChance(thing[1]):
                     currentRoom.droppedItems.append(droppedItem(foe.x, foe.y, thing[0].sprite, thing[0].item))
 
+            if foe.specialSong is not None:
+                playSpecialSong = False
+
+                for enemy in proRoom().foes:
+                    if enemy.specialSong is not None:
+                        play(enemy.specialSong)
+                        playSpecialSong = True
+                        break
+
+                if not playSpecialSong:
+                    play(proRoom().combatSong if proRoom().foes else proRoom().calmSong)
+
             if not currentRoom.foes:
                 roomClearingProcedure()
 
@@ -423,8 +563,9 @@ def roomClearingProcedure():
                 foe.spawnDelay = 250
 
         except IndexError:
+            play(proRoom().calmSong)
             pro.hp = lesser(130, pro.hp + 40)
-            pro.hpRect = pygame.Rect(0, 3, pro.hp * width / (10 * pro.maxHp), height / 90)
+            pro.updateHpRect()
             currentRoom.foes = []
 
             if currentRoom.coordinate == [0, 4, 10]:
@@ -444,7 +585,11 @@ def roomClearingProcedure():
 
     else:
         currentRoom.foesUponRespawn = []
+        play(proRoom().calmSong)
         save()
+
+    if currentRoom.isBossRoom and not currentRoom.foes:
+        currentRoom.respawnsFoes = False
 
 
 def removeBullets():
@@ -466,11 +611,25 @@ def removeEnvironmentObjects():
             currentRoom.environmentObjects.remove(obj)
 
 
+def handleScaryCooldownAndSpawningScary():
+    global currentRoom
+
+    if currentRoom.background == 'desertCaveLumisLake.bmp':
+        pro.scaryCooldown -= 1
+
+    if pro.scaryCooldown <= 0:
+        currentRoom.foes.append(foe('scary', width / 2, height / 2, currentRoom.coordinate, spawnDelay=770))
+        pro.scaryCooldown = 2
+
+
 def roomSwitchingProcedure():
     #switchMusic()
     global currentRoom
     clearBullets()
     currentRoom = proRoom()
+    pro.bullets = []
+    pro.invincibility = 200
+    handleScaryCooldownAndSpawningScary()
 
     for spot in rooms.rooms.values():
         if spot.difficulty == -1:
@@ -481,6 +640,17 @@ def roomSwitchingProcedure():
                 pass
 
         spot.spawnResourcesFromRoomSwitch()
+
+    if currentRoom.foes:
+        play(currentRoom.combatSong)
+
+    else:
+        play(currentRoom.calmSong)
+
+    for enemy in currentRoom.foes:
+        if enemy.specialSong is not None:
+            play(enemy.specialSong)
+            break
 
     save()
 
@@ -514,6 +684,8 @@ def runGame():
     drawGame()
 
     if pro.actions():
+        # TODO make this block's work be done in pro.py.
+
         for enemy in proRoom().foes:
             if enemy not in pro.aggressiveFoes:
                 pro.aggressiveFoes.append(enemy)
@@ -530,80 +702,59 @@ def runGame():
     passiveCritterActions()
     currentRoom.action()
 
+    if pro.song == proRoom().calmSong and proRoom().foes:
+        play(proRoom().combatSong)
+
     if initialRoom != currentRoom:
         roomSwitchingProcedure()
 
+    pygame.display.flip()
     return datetime.datetime.now() - initialTime
 
 
 def respawn():
     global enemyBullets
 
-    for room in [room for room in rooms.rooms.values() if room.biome == 'ship']:
-        room.foes = [copy.deepcopy(enemy) for enemy in room.foesUponRespawn]
-        room.wave = -1
-        room.waves = []
+    for room in rooms.rooms.values():
+        if room.environmentObjectsUponRespawn is not None:
+            room.environmentObjects = room.environmentObjectsUponRespawn.copy()
 
-        for i in room.wavesUponRespawn.copy():
-            waveAdded = []
+        if room.respawnsFoes:
+            room.foes = [copy.deepcopy(enemy) for enemy in room.foesUponRespawn]
+            room.wave = -1
+            room.waves = []
 
-            for j in i:
-                waveAdded.append(copy.deepcopy(j))
+            for i in room.wavesUponRespawn.copy():
+                waveAdded = []
 
-            room.waves.append(waveAdded)
+                for j in i:
+                    waveAdded.append(copy.deepcopy(j))
+
+                room.waves.append(waveAdded)
+
+        for enemy in room.foes:
+            enemy.hp = enemy.initialHp
+
+        room.locks = room.usuallyLocks
 
     pro.room = pro.startingRoom.copy()
     pro.x = pro.startingCoord[0]
     pro.y = pro.startingCoord[1]
-    pro.hp = pro.maxHp
+    pro.hp = pro.maxHp + 1
     pro.hurt(1)
-    pro.hp += 1
+    pro.potions = pro.maxPotions
     pro.aggressiveFoes = []
     enemyBullets = []
     pro.bullets = []
+    play('Crashed.mp3')
 
-
-startButton = button('startButton.png', width / 2, height / 2)
-exitButton = button('exitButton.png', width / 2, height * 2 / 3)
-save1Button = button('save1Button.png', width / 2, height / 2)
-save2Button = button('save2Button.png', width / 2, height * 5 / 8)
-save3Button = button('save3Button.png', width / 2, height * 3 / 4)
-backButton = button('backButton.png', width / 2, height * 7 / 8)
-menu = 'title'
-file = None
-
-while file is None:
-    drawToFullScreen('exocosmoNewTitleScreen.bmp')
-
-    if menu == 'title':
-        draw(startButton)
-        draw(exitButton)
-
-        if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
-
-            if checkMouseCollision(startButton.hitbox):
-                menu = 'saveSelection'
-
-            elif checkMouseCollision(exitButton.hitbox):
-                assert False
-
-    elif menu == 'saveSelection':
-        for i in range(1, 4):
-            exec(f'draw(save{i}Button)')
-
-        if pygame.event.get(pygame.MOUSEBUTTONDOWN, pump=False):
-            for i in range(1, 4):
-                exec(f"if checkMouseCollision(save{i}Button.hitbox): file = {i}")
-
-    pygame.event.pump()
-    pygame.display.flip()
-
-load()
 
 while True:
     while pro.hp > -float('0'):
         try:
-            time.sleep(greater(0.0381 - runGame().seconds, 0))
+            timeTaken = runGame().seconds
+            positionInSong += greater(timeTaken, 1 / 27)
+            time.sleep(greater(1 / 27 - timeTaken, 0))
 
         except KeyboardInterrupt:
             pro.hr = 0
