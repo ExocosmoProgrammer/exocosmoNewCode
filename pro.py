@@ -1,21 +1,18 @@
 import math
 import random
-
-import keyboard
 import pygame
 import worldFile
 import copy
 
-from worldFile import rooms
-from variables import IMAGES, GAMESPEED, display, MOVESPEED, width, height, recipes
+from variables import IMAGES, GAMESPEED, display, MOVESPEED, width, height, recipes, fullscreenRect
 from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle, \
-    greater, getRadians
+    greater, getRadians, blitWithOffset, fillWithOffset
 from rects import rect
 from bullets import bullet
 from item import item
-from plainSprites import plainSprite
 from word import word
 from plainSprites import plainSprite
+from debuff import debuff
 
 nanotechBulletImplosionAnimation = [f'nanotechRevolverBulletImpactFrame{i}.png' for i in range(1, 7) for j in
                                     range(10)]
@@ -39,8 +36,9 @@ class player:
         self.x = self.place.centerx
         self.y = self.place.centery
         self.hitbox = rect(pygame.Rect(self.place.left + width / 320, self.place.top + height / 45,
-                                       self.place.width - width / 160,
-                                       self.place.height - height / 45), 0)
+                                       self.place.width - width / 160, self.place.height - height / 45))
+        self.hitboxForObjectCollision = rect(pygame.Rect(self.place.left, self.place.top + height * 16 / 225,
+                                                         height * 4 / 225, self.place.width))
         self.aggressiveFoes = []
 
         self.idleAnimation = {'w': ['newWalkingAnimation_w1.png'],
@@ -60,6 +58,8 @@ class player:
 
         self.hr = 0
         self.vr = 0
+        self.forcedHr = 0
+        self.forcedVr = 0
         self.animation = self.idleAnimation['s'].copy()
         self.directionlessAnimation = self.idleAnimation
         self.animationFrame = 0
@@ -68,14 +68,15 @@ class player:
         self.mapShown = 0
         self.stamina = 100
         self.file = None
-        self.hpRect = pygame.Rect(0, 3, width / 10, height / 90)
-        self.hpGoneRect = pygame.Rect(0, 3, width / 10, height / 90)
+        self.hpRect = pygame.Rect(width / 160, height / 90, width * 61 / 400 * self.hp / self.maxHp, height * 9 / 450)
         self.bullets = []
         self.invincibility = 0
         self.speed = 1
         self.itemFunctions = {'nanotechRevolver': self.useNanotechRevolver,
-                              'lumisFlamethrower': self.useLumisFlamethrower}
-        self.altItemFunctions = {'lumisFlamethrower': self.useLumisFlamethrowerAlt}
+                              'lumisFlamethrower': self.useLumisFlamethrower, 'jellyfish': self.useJellyfish,
+                              'lumiswood bow': self.useLumisWoodBow, 'bag of sand': self.useBagOfSand}
+        self.altItemFunctions = {'lumisFlamethrower': self.useLumisFlamethrowerAlt,
+                                 'lumiswood bow': self.useLumisWoodBowAlt, 'bag of sand': self.useBagOfSandAlt}
         self.inventory = [item('empty', 'invisiblePixels.png', stackSize=1) for i in range(101)]
         self.activeItem = self.inventory[0]
         self.activeItemSlot = 0
@@ -83,6 +84,23 @@ class player:
         boxWidth = IMAGES['inventoryBox.png'].get_width()
         boxHeight = IMAGES['inventoryBox.png'].get_height()
         self.emptySlots = []
+        self.maxOxygen = 100
+        self.oxygen = 100
+        self.scaryCooldown = 1
+        self.timeSincePressingSpace = float('inf')
+        self.maxPotions = 2
+        self.potions = 2
+        self.potionRechargeProgress = 0
+        self.canRechargePotion = True
+        self.hpBar = plainSprite("hpBar.png", width * 33 / 400, height / 50)
+        self.hpGoneSprite = plainSprite('hpGone.png', width * 33 / 400, height / 50)
+        self.staminaBar = plainSprite("staminaBar.png", width * 33 / 400, height * 13 / 180)
+        self.staminaGoneSprite = plainSprite("staminaGone.png", width * 33 / 400, height * 13 / 180)
+        self.potionSprites = [plainSprite('healthPotion.png', width / 25, height * 4 / 5),
+                              plainSprite('healthPotion.png', width * 3 / 25, height * 4 / 5)]
+        self.potionsFilledBar = plainSprite("potionFilledBar.png", width / 25, height * 71 / 90)
+        self.song = 'Crashed.mp3'
+        self.cooldownForControlledMovement = 0
 
         for i in range(3):
             for j in range(10):
@@ -128,6 +146,9 @@ class player:
 
         return 0
 
+    def updateHpRect(self):
+        self.hpRect = pygame.Rect(width / 160, height / 90, width * 61 / 400 * self.hp / self.maxHp, height * 9 / 450)
+
     def hurt(self, damage):
         """self.hurt(damage) reduces the player's hp by damage, makes the player temporarily invincible, and update's
         the display that shows the player's hp."""
@@ -135,7 +156,7 @@ class player:
         if damage:
             self.hp -= damage
             self.invincibility = 250
-            self.hpRect = pygame.Rect(0, 3, self.hp * width / (10 * self.maxHp), height / 90)
+            self.updateHpRect()
 
     def progressAnimation(self):
         """The progressAnimation changes your animation, directionlessAnimation, and sprite as appropriate."""
@@ -171,46 +192,84 @@ class player:
             self.invincibility = 2
 
     def dash(self):
-        if self.stamina >= 250 and self.slideTime <= 0:
+        if self.stamina >= 300 and self.slideTime <= 0:
             self.slideTime = 40
-            self.stamina -= 250
+            self.stamina -= 300
             self.invincibility = 160
 
-    def useActiveItem(self):
+    def usePotion(self):
+        if self.potions:
+            self.potions -= 1
+            self.hp = lesser(self.hp + 70, self.maxHp)
+            self.potionRechargeProgress = 0
+            self.canRechargePotion = True
+            self.updateHpRect()
+
+    def useActiveItem(self, offset=(0, 0)):
         """Makes the player use their active item as appropriate."""
 
-        if self.fireCooldown <= 0 and not self.sprinting and self.slideTime <= 0:
-            if pygame.mouse.get_pressed()[0]:
+        if self.fireCooldown <= 0 and not self.sprinting and self.slideTime <= 0 and self.activeItem.cooldown <= 0:
+            if pygame.mouse.get_pressed()[0] and self.activeItem.standardCooldown <= 0:
                 try:
-                    self.itemFunctions[self.activeItem.name]()
+                    self.itemFunctions[self.activeItem.name](offset=offset)
+                    return 1
+
+                except KeyError:
+                    # TODO Replace the next line with pass.
+                    pass
+
+            elif pygame.mouse.get_pressed()[2] and self.activeItem.altCooldown <= 0:
+                try:
+                    self.altItemFunctions[self.activeItem.name](offset=offset)
                     return 1
 
                 except KeyError:
                     pass
 
-            elif pygame.mouse.get_pressed()[2]:
-                try:
-                    self.altItemFunctions[self.activeItem.name]()
 
-                except KeyError:
-                    pass
+    def fireToMouse(self, damage, sprite, speed, knockbackStrength=0, knockbackDuration=50, **kwargs):
+        """Fire a projectile towards the mouse."""
 
-
-    def fireToMouse(self, damage, sprite, speed, animation=None, impactAnimation=None):
+        # Find the hr and vr that the projectile must have.
         path = getPath(speed, (self.x, self.y), pygame.mouse.get_pos())
-        self.bullets.append(bullet(path[0], path[1], damage, sprite, self.x, self.y, animation=animation,
-                                   impactAnimation=impactAnimation))
 
-    def fireInConsistenSpread(self, damage, sprite, speed, qty, totalAngleInRadians, animation=None,
-                              impactAnimation=None, linger=1600):
+        # Determine the knockback.
+        knockback = [(knockbackStrength * path[0]) / speed, (knockbackStrength * path[1]) / speed,
+                     knockbackDuration] if knockbackStrength \
+            else None
+
+        # Fire a projectile.
+        self.bullets.append(bullet(path[0], path[1], damage, sprite, self.x, self.y, firer=self, knockback=knockback,
+                                   **kwargs))
+
+    def fireInConsistentSpread(self, damage, sprite, speed, qty, totalAngleInRadians, animation=None,
+                              impactAnimation=None, linger=1600, knockbackStrength=0, knockbackDuration=50, **kwargs):
+        """Fire a spread of projectiles centered on the mouse."""
+
+        # Calculate the angle between each projectile.
         angleChangePerProjectile = totalAngleInRadians / (qty - 1)
 
+        # Calculate the angle from self to the center of the spread.
+        mousePosition = pygame.mouse.get_pos()
+        centerAngle = -getRadians(mousePosition[0] - self.x, mousePosition[1] - self.y)
+
+        # Fire projectiles.
         for i in range(qty):
-            mousePosition = pygame.mouse.get_pos()
-            angle = -getRadians(mousePosition[0] - self.x, mousePosition[1] - self.y) - totalAngleInRadians / 2 + \
+            # Determine the angle at which to fire.
+            angle = centerAngle - totalAngleInRadians / 2 + \
                     i * angleChangePerProjectile
-            self.bullets.append(bullet(speed * math.cos(angle), speed * math.sin(angle), damage, sprite, self.x,
-                                       self.y, animation=animation, impactAnimation=impactAnimation, linger=linger))
+
+            # Store the sine and cosine of angle because they will be used repeatedly.
+            sine = math.sin(angle)
+            cosine = math.cos(angle)
+
+            # Deterimine the knockback.
+            knockback = [cosine * knockbackStrength, sine * knockbackStrength, knockbackDuration]
+
+            # Fire a projectile.
+            self.bullets.append(bullet(speed * cosine, speed * sine, damage, sprite, self.x,
+                                       self.y, animation=animation, impactAnimation=impactAnimation, linger=linger,
+                                       firer=self, knockback=knockback, **kwargs))
 
     def fireInRandomSpread(self, damage, sprite, speed, qty, maxAngleInDegrees, animation=None, impactAnimation=None,
                            timeBeforeStop=1600, piercing=1):
@@ -221,27 +280,121 @@ class player:
             angle = angleToMouse + random.randint(-maxAngleInDegrees, maxAngleInDegrees) * math.pi / 360
             self.bullets.append(bullet(speed * math.cos(angle), speed * math.sin(angle), damage, sprite, self.x,
                                        self.y, animation=animation, impactAnimation=impactAnimation,
-                                       timeBeforeStop=timeBeforeStop, piercing=piercing))
+                                       timeBeforeStop=timeBeforeStop, piercing=piercing, firer=self))
 
-    def useNanotechRevolver(self):
+    def attatchProjectileToSelf(self, bullet, connectorSprite, offset=(0, 0)):
+        """Connect bullet to self using connectorSprite. For this function to work, bullet.firer must be self"""
+        bullet.additionalMethods = {bullet.visuallyConnectToFirer: (connectorSprite, offset,)}
+
+    def makeProjectilePullSelfUponHittingFoe(self, bullet, speed, givesInvincibility=True):
+        """Make bullet pull self towards bullet upon hitting a foe. The speed paramater determines the speed at which
+        self will be pulled."""
+        bullet.foeContactEffect = (f'[projectile.firer.forcedHr, projectile.firer.forcedVr] = getPath({speed}, '
+                                   f'(pro.x, pro.y), (foe.x, foe.y)); '
+                                   f'pro.cooldownForControlledMovement = '
+                                   f'pointDistance((pro.x, pro.y), '
+                                   f'(foe.x, foe.y)) / {speed}')
+
+        if givesInvincibility:
+            bullet.foeContactEffect += (f'; projectile.firer.invincibility = '
+                                        f'pro.cooldownForControlledMovement + 180')
+
+    def destroyFoes(self):
+        for i in self.proRoom().foes:
+            i.hp = 0
+
+    def useNanotechRevolver(self, **kwargs):
         """The useNanotechRevolver function will be your attack while your active item is the nanotechRevolver."""
+        self.destroyFoes()
         self.fireToMouse(1, 'basicRangeProjectile_d.png', 6.5,
                          impactAnimation=nanotechBulletImplosionAnimation)
         self.fireCooldown = 60
 
-    def useLumisFlamethrower(self):
-        self.fireInConsistenSpread(0.3, 'spiderProjectile1.png', 8, 5, math.pi / 8,
+    def useLumisFlamethrower(self, **kwargs):
+        self.fireInConsistentSpread(0.3, 'spiderProjectile1.png', 8, 5, math.pi / 8,
                                    animation=[f'spiderProjectile{i}.png' for i in [1, 2] for j in range(30)],
                                    linger=100)
         self.fireCooldown = 45
 
-    def useLumisFlamethrowerAlt(self):
+    def useLumisFlamethrowerAlt(self, **kwargs):
         for i in range(5):
-            self.fireInRandomSpread(0.01, 'desertCaveMothProjectile1.png', 2 + i / 4, 18,
+            self.fireInRandomSpread(0.002, 'desertCaveMothProjectile1.png', 2 + i / 4, 18,
                                     60,
                                     animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] for j in range(15)],
                                     timeBeforeStop=100, piercing=200000)
         self.fireCooldown = 100
+
+    def useJellyfish(self, **kwargs):
+        self.fireToMouse(10, 'desertCaveJellyfishFrame1.png', 7.5,
+                         animation=[f'desertCaveJellyfishFrame{i}.png' for i in range(1, 5) for j in range(20)],
+                         debuffInflictions=[debuff('nanotechRevolverBulletImpactFrame1.png',
+                                                   'self.speed *= 2 / 3; self.hp -= GAMESPEED / 100',
+                                                   5400,
+                                                   effectUponEnding='debuff.source.source.cooldown = 900')],
+                         source=self.activeItem,
+                         foeContactEffect='projectile.source.cooldown = 5400;')
+        self.bullets[-1].debuffInflictions[0].source = self.bullets[-1]
+        self.activeItem.cooldown = 900
+
+    def useLumisWoodBow(self, **kwargs):
+        self.fireToMouse(2.5, 'spiderProjectile1.png', 10)
+        self.fireCooldown = 100
+
+    def useLumisWoodBowAlt(self, offset=(0, 0), **kwargs):
+        self.fireToMouse(3, 'desertCaveFlyMinibossLargeProjectile1.png', 8)
+        self.attatchProjectileToSelf(self.bullets[-1], 'desertCaveFlyMinibossLaserProjectile1.png',
+                                     offset=offset)
+        self.makeProjectilePullSelfUponHittingFoe(self.bullets[-1], 7.5)
+        self.activeItem.cooldown = 1260
+
+    def useBagOfSand(self, **kwargs):
+        """Use the bag of sand's standard attack method."""
+
+        # Fire projectiles.
+        self.fireInConsistentSpread(0, 'desertCaveMothProjectile1.png', 3, 5, math.pi / 6,
+                                    piercing=float('inf'), stun=360)
+
+        # Make each projectile slow down over time.
+        for i in range(-5, 0):
+            # Store a projectile's hr and vr.
+            initialHr = self.bullets[i].hr
+            initialVr = self.bullets[i].vr
+
+            # Make the projectile slow down over time.
+            self.bullets[i].movementByDuration = (f"[{initialHr} * math.e ** (-self.currentDuration / 180),"
+                                                   f"{initialVr} * math.e ** (-self.currentDuration / 180)]")
+
+        # Set the bag of sand's standard cooldown.
+        self.activeItem.standardCooldown = 3600
+
+    def useBagOfSandAlt(self, **kwargs):
+        """Use the bag of sand's alternate attack method."""
+
+        # Fire a projectile.
+        self.fireToMouse(0, 'largerWraithSwing.png', 7, piercing=float('inf'), linger=60,
+                         timeBeforeStop=40)
+
+        # Store the projectile's movement.
+        hr = self.bullets[-1].hr
+        vr = self.bullets[-1].vr
+
+        # Make the projectile knock back enemies, make the screen shake, and pause the game upon contact with stunned
+        # foes.
+        self.bullets[-1].foeContactEffect = (f"if foe.stun > 0: foe.movementModifiers.append([{hr / 2}, {vr / 2}, 360]);"
+                                             f" displayVars.screenShakeDuration = "
+                                             f"greater(displayVars.screenShakeDuration, 50); time.sleep(0.03)")
+
+        # Set self.fireCooldown.
+        self.fireCooldown = 180
+
+    def startSprinting(self):
+        self.sprinting = 1
+        self.updateSpeed()
+
+        if 30 < self.timeSincePressingSpace < 60 and self.speed <= 5:
+            self.speed += 1
+
+        self.timeSincePressingSpace = 0
 
     def getInput(self):
         """The getInput function will perform actions based on the player's input."""
@@ -269,7 +422,10 @@ class player:
                 self.vr += 2
 
             elif event.key == pygame.K_SPACE:
-                self.sprinting = 1
+                self.startSprinting()
+
+            elif event.key == pygame.K_h:
+                self.usePotion()
 
             elif event.key == pygame.K_l:
                 if self.inventoryShown:
@@ -278,6 +434,13 @@ class player:
                 else:
                     self.inventoryShown = 1
                     self.updateItemPositions()
+
+            elif event.key == pygame.K_z and not (self.proRoom().locks and self.proRoom().foes):
+                try:
+                    self.room = self.proRoom().roomThatCanBeManuallyTeleportedTo.coordinate
+
+                except AttributeError:
+                    pass
 
             elif event.key == pygame.K_t:
                 try:
@@ -293,6 +456,10 @@ class player:
                 else:
                     self.mapShown = 1
 
+            elif event.key == pygame.K_0:
+                self.activeItem = self.inventory[9]
+                self.activeItemSlot = 9
+
             elif pygame.key.get_mods() & pygame.KMOD_CTRL and not self.sprinting:
                 self.slide()
 
@@ -300,9 +467,9 @@ class player:
                 self.dash()
 
             else:
-                for i in range(10):
-                    exec(f'if event.key == pygame.K_{i}: self.activeItem = self.inventory[{i}]')
-                    exec(f'if event.key == pygame.K_{i}: self.activeItemSlot = {i}')
+                for i in range(9):
+                    exec(f'if event.key == pygame.K_{i + 1}: self.activeItem = self.inventory[{i}]')
+                    exec(f'if event.key == pygame.K_{i + 1}: self.activeItemSlot = {i}')
 
         for event in pygame.event.get(pygame.KEYUP):
             if event.key == pygame.K_a:
@@ -337,6 +504,24 @@ class player:
         self.stamina = lesser(self.stamina + GAMESPEED, 500)
         self.fireCooldown -= GAMESPEED
         self.invincibility -= GAMESPEED
+        self.timeSincePressingSpace += GAMESPEED
+        currentRoom = self.proRoom()
+        self.cooldownForControlledMovement -= GAMESPEED
+
+        for i in self.inventory[0: 30]:
+            i.cooldown -= GAMESPEED
+            i.standardCooldown -= GAMESPEED
+            i.altCooldown -= GAMESPEED
+
+        if currentRoom.oxygenLoss:
+            self.oxygen -= currentRoom.oxygenLoss
+
+            if self.oxygen <= 0:
+                self.hp = 0
+
+        else:
+            self.oxygen = self.maxOxygen
+
         self.updateSpeed()
 
     def updateItemPositions(self):
@@ -347,33 +532,88 @@ class player:
             thing.place.centerx, thing.place.centery = box.place.centerx, box.place.centery
             thing.updateHitbox()
 
-    def showInventory(self):
+    def showInventory(self, offset=(0, 0)):
         for box in self.inventoryBoxes:
-            draw(box)
+            draw(box, offset=offset)
 
         for thing in self.inventory:
+            thing.progressAnimation()
+
             if thing.name != 'empty':
-                draw(thing)
+                draw(thing, offset=offset)
 
                 index = self.inventory.index(thing)
 
                 if (index < 30 or index == 100) and checkMouseCollision(thing.hitbox) and not thing.dragged:
-                    thing.textBox.draw()
+                    thing.textBox.draw(offset=offset)
 
                 if thing.qty > 1:
-                    word(thing.hitbox.centerx, thing.hitbox.bottom, str(thing.qty), 'finalNumber').draw()
+                    word(thing.hitbox.centerx, thing.hitbox.bottom, str(thing.qty),
+                         'finalNumber').draw(offset=offset)
 
-        draw(craftingBox)
-        draw(craftButton)
+        draw(craftingBox, offset=offset)
+        draw(craftButton, offset=offset)
 
-    def showInfo(self):
-        display.fill("#1abdbd", self.hpGoneRect)
-        display.fill("#cd300e", self.hpRect)
-        display.fill('#90b133', pygame.Rect(0, height / 20, width / 10,
-                                  height / 90))
-        staminaRect = pygame.Rect(0, height / 20, width * self.stamina / 5000,
-                                  height / 90)
-        display.fill("#1abdbd", staminaRect)
+    def showHotbar(self, offset=(0, 0)):
+        """Show self's hotbar."""
+
+        for i in range(10):
+            place = pygame.Rect(width * ((i + 1) /11 - 3 / 160), height * 14 / 15, width * 3 / 80, height / 15)
+            blitWithOffset(IMAGES[self.inventoryBoxes[i].sprite], place, offset)
+            itemShown = self.inventory[i]
+            slotNumberMarker = word(place.left - width / 160, place.top - height / 90, str(i + 1 if i < 9 else 0),
+                                    'finalNumber')
+            slotNumberMarker.draw(offset=offset)
+
+            # If self.inventoryShown, then itemShown will progress its animation in self.showInventory.
+            if not self.inventoryShown:
+                itemShown.progressAnimation()
+
+            # Draw the item.
+            if itemShown.name != 'empty':
+                blitWithOffset(IMAGES[itemShown.sprite], place, offset=offset)
+
+            # Show the item's cooldowns.
+            if itemShown.cooldown > 0:
+                cooldownMarker = word(place.left, place.centery, str(int(itemShown.cooldown / 180) + 1),
+                                      'finalNumber')
+                cooldownMarker.draw(offset=offset)
+
+            if itemShown.standardCooldown > 0:
+                cooldownMarker = word(place.left + height / 45, place.centery,
+                                      str(int(itemShown.standardCooldown / 180) + 1),'finalNumber')
+                cooldownMarker.draw(offset=offset)
+
+            if itemShown.altCooldown > 0:
+                cooldownMarker = word(place.left - height / 45, place.centery,
+                                      str(int(itemShown.altCooldown / 180) + 1),'finalNumber')
+                cooldownMarker.draw(offset=offset)
+
+    def showInfo(self, offset=(0, 0)):
+        draw(self.hpGoneSprite, offset=offset)
+        fillWithOffset("#f20cc6", self.hpRect, offset)
+        draw(self.hpBar, offset=offset)
+        staminaRect = pygame.Rect(width / 160, height * 56 / 900, width * 31 / 100000 * self.stamina, height / 50)
+        draw(self.staminaGoneSprite, offset=offset)
+        fillWithOffset("#10efe6", staminaRect, offset)
+        draw(self.staminaBar, offset=offset)
+
+        for i in range(self.potions):
+            draw(self.potionSprites[i], offset=offset)
+
+        if self.proRoom().oxygenLoss:
+            oxygenGoneRect = pygame.Rect(width / 100, height / 10, width / 100, height / 10)
+            oxygenRect = pygame.Rect(width / 100, height / 10, width / 100,
+                                     height * self.oxygen / self.maxOxygen / 10)
+            fillWithOffset("#6304b6ff", oxygenGoneRect, offset)
+            fillWithOffset("#06d3ffff", oxygenRect, offset)
+
+        if 30 < self.timeSincePressingSpace < 60:
+            totalTimeToSprintRect = pygame.Rect(width / 40, height / 10, width / 100, height / 10)
+            timeToSprintRect = pygame.Rect(width / 40, height / 10, width / 100,
+                                           height * (60 - self.timeSincePressingSpace) / 300)
+            fillWithOffset("#1abdbd", totalTimeToSprintRect, offset)
+            fillWithOffset("#cd300e", timeToSprintRect, offset)
 
     def updateInventory(self):
         self.activeItem = self.inventory[self.activeItemSlot]
@@ -485,117 +725,113 @@ class player:
             for thing in items:
                 self.gainItem(thing)
 
-    def showMap(self):
-        display.fill((0, 0, 0))
-
+    def showMap(self, offset=(0, 0)):
+        fillWithOffset((0, 0, 0), fullscreenRect, offset)
         for coordinate in list(rooms.rooms.keys()):
             if coordinate[2] == self.room[2] and abs(self.room[1] - coordinate[1]) < 3 \
                     and abs(self.room[0] - coordinate[0]) < 3:
-                display.blit(IMAGES[rooms.rooms[coordinate].mapMarker],
+                blitWithOffset(IMAGES[rooms.rooms[coordinate].mapMarker],
                              pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
                                          height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
-                                         9 * width / 320, 8 * height / 225))
+                                         9 * width / 320, 8 * height / 225), offset)
 
                 if 5 > rooms.rooms[coordinate].difficulty > -1:
-                    display.blit(IMAGES['blobSummon.png'],
+                    blitWithOffset(IMAGES['blobSummon.png'],
                                  pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
                                              height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
-                                             9 * width / 320, 8 * height / 225))
+                                             9 * width / 320, 8 * height / 225), offset)
 
                 if coordinate == tuple(self.room):
-                    display.blit(IMAGES['playerRoomMapImage.png'],
+                    blitWithOffset(IMAGES['playerRoomMapImage.png'],
                                  pygame.Rect(
                                      width * 311 / 640, height * 434 / 900,
-                                     9 * width / 320, 8 * height / 225))
+                                     9 * width / 320, 8 * height / 225), offset)
 
     def updateHitbox(self):
         """Updates the player's hitbox."""
         self.hitbox = rect(pygame.Rect(self.place.left, self.place.top + 20, self.place.width,
-                                       self.place.height - 20), 0)
+                                       self.place.height - height / 80))
+        self.hitboxForObjectCollision = rect(pygame.Rect(self.place.left, self.place.top + height / 15,
+                                                         self.place.width, height * 11 / 450))
 
     def move(self):
         """The move function makes the player move."""
         oldX = self.x
         oldY = self.y
-        self.x += self.hr * GAMESPEED * MOVESPEED * self.speed
-        self.y += self.vr * GAMESPEED * MOVESPEED * self.speed
+        (hr, vr) = (self.hr * self.speed, self.vr * self.speed) if self.cooldownForControlledMovement <= 0 else \
+            (self.forcedHr, self.forcedVr)
+        self.x += hr * GAMESPEED * MOVESPEED
+        self.y += vr * GAMESPEED * MOVESPEED
         self.slideTime -= GAMESPEED
         self.place.centerx = self.x
         self.place.centery = self.y
         self.updateHitbox()
+        self.proRoom()
 
-        for thing in rooms.rooms[tuple(self.room)].environmentObjects:
-            if thing.hitbox.checkCollision(self.hitbox):
+        for thing in self.proRoom().environmentObjects:
+            if thing.hitbox.checkCollision(self.hitboxForObjectCollision):
                 self.x = oldX
                 self.y = oldY
                 self.place.centerx = self.x
                 self.place.centery = self.y
                 self.updateHitbox()
 
-            if thing.hitbox.checkCollision(self.hitbox):
+            if thing.hitbox.checkCollision(self.hitboxForObjectCollision):
                 thing.hp = 0
 
-        if self.place.left < rooms.rooms[tuple(self.room)].leftXBoundary:
+        if self.place.left < self.proRoom().leftXBoundary:
             if (self.room[0] - 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                    self.place.left = self.proRoom().leftXBoundary
 
                 else:
                     self.room[0] -= 1
-                    self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
-                    self.bullets = []
-                    self.invincibility = 200
+                    self.place.right = self.proRoom().rightXBoundary
 
             else:
-                self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
+                self.place.left = self.proRoom().leftXBoundary
 
             self.x = self.place.centerx
 
-        elif self.place.right > rooms.rooms[tuple(self.room)].rightXBoundary:
+        elif self.place.right > self.proRoom().rightXBoundary:
             if (self.room[0] + 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                    self.place.right = self.proRoom().rightXBoundary
 
                 else:
                     self.room[0] += 1
-                    self.place.left = rooms.rooms[tuple(self.room)].leftXBoundary
-                    self.bullets = []
-                    self.invincibility = 200
+                    self.place.left = self.proRoom().leftXBoundary
 
             else:
-                self.place.right = rooms.rooms[tuple(self.room)].rightXBoundary
+                self.place.right = self.proRoom().rightXBoundary
 
             self.x = self.place.centerx
 
-        if self.place.top < rooms.rooms[tuple(self.room)].yBoundaries:
+        if self.place.top < self.proRoom().yBoundaries:
             if (self.room[0], self.room[1] + 1, self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                    self.place.top = self.proRoom().yBoundaries
 
                 else:
-                    self.place.bottom = height
                     self.room[1] += 1
-                    self.bullets = []
-                    self.invincibility = 200
+                    self.place.bottom = self.proRoom().bottomYBoundary
 
             else:
-                self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
+                self.place.top = self.proRoom().yBoundaries
 
             self.y = self.place.centery
 
-        elif self.place.bottom > height:
+        elif self.place.bottom > self.proRoom().bottomYBoundary:
             if (self.room[0], self.room[1] - 1, self.room[2]) in list(rooms.rooms.keys()):
-                if rooms.rooms[tuple(self.room)].locks and rooms.rooms[tuple(self.room)].foes:
-                    self.place.bottom = height
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                    self.place.bottom = self.proRoom().bottomYBoundary
 
                 else:
                     self.room[1] -= 1
-                    self.place.top = rooms.rooms[tuple(self.room)].yBoundaries
-                    self.bullets = []
-                    self.invincibility = 200
+                    self.place.top = self.proRoom().yBoundaries
 
             else:
-                self.place.bottom = height
+                self.place.bottom = self.proRoom().bottomYBoundary
 
             self.y = self.place.centery
 
@@ -605,7 +841,7 @@ class player:
             return 1
 
     def foeStats(self):
-        print([vars(foe) for foe in rooms.rooms[tuple(self.room)].foes])
+        print([vars(foe) for foe in self.proRoom().foes])
 
     def loadRooms(self, file):
         """The loadGame function should load the player info and the world info."""
@@ -627,14 +863,19 @@ class player:
         """The saveGame function should save the player info and the world info."""
         saveWithPickle(f'playerSave{self.file}.pickle', self)
 
-    def actions(self):
+    def actions(self, offset=(0, 0)):
         """The actions function will perform all the player's actions."""
         self.getInput()
         self.updateStats()
         self.progressAnimation()
+        returnedValues = []
 
-        if self.useActiveItem():
+        if self.useActiveItem(offset=offset):
             self.move()
+
+            for foe in [foe for foe in self.proRoom().foes if foe.type == 'scary' and not foe.aggressive]:
+                foe.aggressive = True
+
             return 1
 
         elif self.move():
@@ -642,6 +883,11 @@ class player:
 
     def proRoom(self):
         return rooms.rooms[tuple(self.room)]
+
+    def getRidOfAllFoes(self):
+        for foes in [i.foes for i in rooms.rooms.values()]:
+            for i in foes:
+                i.hp = 0
 
     def getUpdate(self):
         comparison = player()
