@@ -6,7 +6,7 @@ import math
 
 from bullets import bullet
 from definitions import getPath, sqrt, getRadians, pointDistance, lesser, greater, \
-    getPartiallyRandomPath, skip, plusOrMinus, fillWithOffset
+    getPartiallyRandomPath, skip, plusOrMinus, fillWithOffset, playSoundEffect
 from temporaryAnimation import temporaryAnimation
 from variables import IMAGES, GAMESPEED, MOVESPEED, width, height, display, diagonal
 from rects import rect
@@ -55,6 +55,10 @@ class foe:
         self.goesThroughObjects = False
         self.speed = 1
         self.debuffs = []
+        self.idleSoundCooldown = 0
+
+        # self.deathEffect will be executed when self dies.
+        self.deathEffect = 'pass'
         
         # A foe that is attacking self may also hurt enemies in self.summons.
         self.summons = []
@@ -98,6 +102,9 @@ class foe:
         self.loot = []
         self.stun = 0
 
+        # self.empowered can be set to true when self is created.
+        self.empowered = False
+
         # self.movementModifiers will modify self's movement temporarily. Each element in this list should be a list
         # \where the first element is the horizontal modifier, the second element is the vertical modifier, and the
         # third element is the duration.
@@ -118,6 +125,8 @@ class foe:
                 self.fireCooldown = 0
                 self.aggressionRadius = float('inf')
                 self.deathAnimation = [f'brokenTurretDestruction{i}.png' for i in range(1, 9) for j in range(60)]
+                self.cooldownPerRoomSwitch = float('inf')
+                self.directionOfRotation = 1
     
             case 'flamingRobot':
                 self.hp = 5
@@ -126,6 +135,7 @@ class foe:
                 self.accelerationCooldown = 0
                 self.fireCooldown = 0
                 self.aggressionRadius = float('inf')
+                self.cooldownPerRoomSwitch = float('inf')
     
             case 'robotBodyguard':
                 self.hp = 15
@@ -141,7 +151,8 @@ class foe:
                 pygameRect = pygame.Rect(-widthOfSprite / 2, heightOfSprite / 11, widthOfSprite,
                                          heightOfSprite * 9 / 22)
                 self.hitboxOnSelf = rect(pygameRect)
-    
+                self.cooldownPerRoomSwitch = float('inf')
+
             case 'antlionLarva':
                 self.hp = 3
                 self.sprite = 'desertCaveAntlionLarvaFrame1.png'
@@ -156,6 +167,7 @@ class foe:
                 self.sprite = 'meleeBlob.png'
                 self.damage = 30
                 self.duration = 1000
+                self.fireDuration = 1600
     
             case 'desertCaveSummoner':
                 self.hp = 23
@@ -170,9 +182,10 @@ class foe:
     
             case 'desertCaveSpittingGrub':
                 self.hp = 2
-                self.damage = 20
+                self.damage = 200
                 self.spawnDelay = random.randint(10, 100)
                 self.sprite = 'blobSummon.png'
+                self.cooldownPerRoomSwitch = float('inf')
     
             case 'desertCaveJellyfish':
                 self.hp = 5
@@ -330,6 +343,7 @@ class foe:
                 self.sprite = 'brokenTurret.png'
                 self.damage = 26
                 self.rotated = True
+                self.directionOfRotation = 1
     
             case 'hellhound':
                 self.hp = 1250
@@ -370,7 +384,6 @@ class foe:
 
         self.place = IMAGES[self.sprite].get_rect(center=(centerx, centery))
         self.hitbox = rect(self.place)
-        self.initialHp = self.hp
 
         for enemy in self.dependentFoes:
             enemy.dependentFoes.append(self)
@@ -378,6 +391,8 @@ class foe:
 
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
+
+        self.initialHp = self.hp
 
     def progressAnimation(self, *args):
         """Update self's sprite."""
@@ -399,17 +414,24 @@ class foe:
 
     def actAsBrokenTurret(self, target, *args):
         # Rotate self.
-        self.angle += 0.015 * GAMESPEED
+        self.angle += self.directionOfRotation * (0.02 if self.empowered else 0.015) * GAMESPEED
         self.place = IMAGES[self.sprite].get_rect(center=(self.x, self.y))
 
         # Reduce self's cooldown.
         self.fireCooldown -= GAMESPEED
 
+        # Regularly play a sound effect.
+        if self.idleSoundCooldown <= 0:
+            self.idleSoundCooldown = 50
+            playSoundEffect('brokenTurretSound3.wav', volume=0.03)
+
         # If self is ready to do so, fire a projectile and set self's delay before firing again.
         if self.fireCooldown <= 0:
-            self.newBullets.append(bullet(math.cos(self.angle) * 2, math.sin(self.angle) * 2, 26,
+            speed = 3 if self.empowered else 2
+
+            self.newBullets.append(bullet(math.cos(self.angle) * speed, math.sin(self.angle) * speed, 26,
                                    'brokenTurretFireball.png', self.x, self.y))
-            self.fireCooldown = random.randint(27, 50)
+            self.fireCooldown = random.randint(15, 30) if self.empowered else random.randint(25, 50)
 
     def actAsTemporaryBrokenTurret(self, target, *args):
         # Attack like a normal broken turret.
@@ -460,8 +482,8 @@ class foe:
                 for modifier in self.movementModifiers:
                     modifier[1] *= -1 / 3
 
-            # If self hit a wall, execute the following block,
-            if collision:
+            # If self hit a wall and self's movement is being modified, then execute the following block,
+            if collision and [i for i in self.movementModifiers if i[:2] != [0, 0]]:
                 # Calculate self's current movement speed.
                 speed = sqrt((sum([modifier[0] for modifier in self.movementModifiers]) + self.hr) ** 2 +
                              (sum([modifier[1] for modifier in self.movementModifiers]) + self.vr) ** 2)
@@ -546,25 +568,31 @@ class foe:
 
         # If needed, make self switch directions and set a cooldown until self switches directions again.
         if self.accelerationCooldown <= 0:
-            self.setMovementNearTarget(target, 1.2, 30)
-            self.accelerationCooldown = 300
+            self.setMovementNearTarget(target, 1.5 if self.empowered else 1.2, 30)
+            self.accelerationCooldown = 200 if self.empowered else 300
 
         # If needed, make self create a fire and set a cooldown until self creates another fire.
         if self.fireCooldown <= 0:
             self.newBullets.append(bullet(0, 0, 26, 'flamingRobotFireTrail.png', self.x, self.y))
-            self.fireCooldown = 100
+
+            if self.empowered:
+                self.basicRandomShot(1, 'flamingRobotFireTrail.png', 26, rotation=0, linger=200)
+                self.fireCooldown = 50
+
+            else:
+                self.fireCooldown = 100
 
         # Make self move, and switch directions if self collided with a wall this time.
         if self.moveNormally():
-            self.setMovementNearTarget(target, 1.2, 30)
-            self.accelerationCooldown = 300
+            self.setMovementNearTarget(target, 1.5 if self.empowered else 1.2, 30)
+            self.accelerationCooldown = 200 if self.empowered else 300
 
     def actAsRobotBodyguard(self, target, *args):
         """This function should be used by robot bodyguards on each turn of theirs."""
 
         if self.mode == 'chasing':
             # Move straight to the player.
-            self.setMovementToTarget(target, 0.9)
+            self.setMovementToTarget(target, 1.35 if self.empowered else 0.9)
             self.moveNormally()
 
         else:
@@ -573,8 +601,14 @@ class foe:
 
             # If self is ready to fire, make self fire and set a cooldown until self can fire again.
             if self.fireCooldown <= 0:
-                self.basicStraightShot(2.1, 'brokenTurretFireball.png', 26, target)
-                self.fireCooldown = 90
+                if self.empowered:
+                    self.basicClusterShot(1, 15, target, 3.2,
+                                          'brokenTurretFireball.png', 26)
+                    self.fireCooldown = 30
+
+                else:
+                    self.basicStraightShot(2.1, 'brokenTurretFireball.png', 26, target)
+                    self.fireCooldown = 90
 
         self.modeDuration -= GAMESPEED
 
@@ -582,11 +616,12 @@ class foe:
         if self.modeDuration <= 0:
             if self.mode == 'chasing':
                 self.mode = 'firing'
-                self.modeDuration = 1000
+                self.modeDuration = 500 if self.empowered else 1000
 
             else:
                 self.mode = 'chasing'
-                self.modeDuration = random.randint(2000, 4000)
+                self.modeDuration = random.randint(500, 1000) if self.empowered else \
+                    random.randint(2000, 4000)
 
     def actAsAntlionLarva(self, target, *args):
         """This function should be used by antlion larvae on each turn of theirs."""
@@ -634,7 +669,7 @@ class foe:
         # If self.duration <= 0, make self create a fire and die.
         if self.duration <= 0:
             self.newBullets.append(bullet(0, 0, 65, 'aLargerFire.png', self.x, self.y,
-                                          dissappearsAtEdges=0, piercing=float('inf')))
+                                          dissappearsAtEdges=0, piercing=float('inf'), linger=self.fireDuration))
             self.hp = 0
 
     def actAsDesertCaveSpittingGrub(self, target, *args):
@@ -645,7 +680,7 @@ class foe:
 
         # If self.fireCooldown <= 0, make self fire at the player, and set a cooldown until self fires again.
         if self.fireCooldown <= 0:
-            self.basicStraightShot(1.5, 'brokenTurretFireball.png', 15, target)
+            self.basicStraightShot(1.5, 'brokenTurretFireball.png', 200, target)
             self.fireCooldown = 500
 
     def actAsDesertCaveJellyfish(self, target, *args):
@@ -764,6 +799,7 @@ class foe:
         for thing in room.environmentObjects:
             if thing.hitbox.checkCollision(self.hitbox):
                 self.deltaTSign *= -1
+                self.setMovementInSemicircleTowardsTarget(target, width / 20)
 
                 while thing.hitbox.checkCollision(self.hitbox):
                     self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
@@ -803,6 +839,7 @@ class foe:
                                     self.x + random.randint(-int(width / 10), int(width / 10)),
                                     self.y + random.randint(-int(height / 10), int(height / 10)), self.room,
                                     angle=getRadians(target.x - self.x, self.y - target.y), spawnDelay=250))
+            self.newFoes[-1].hp = float('inf') if self.empowered else self.newFoes[-1].hp
 
             self.fireCooldown = 1500
 
@@ -813,9 +850,13 @@ class foe:
                                  'bouncySplittingProjectileFromWatchdog.png', 45)
             self.altFireCooldown = 1500
 
+            if self.empowered:
+                for i in range(1, 8):
+                    self.giveProjectileHoming(self.newBullets[-i], diagonal / 10)
+
         # If self.thirdFireCooldown <= 0, teleport to a random location, and set self.thirdFireCooldown.
         elif self.thirdFireCooldown <= 0:
-            self.teleportRandomly(250)
+            self.teleportRandomly(100 if self.empowered else 250)
             self.thirdFireCooldown = 1500
 
     def actAsDesertCaveSpider(self, target, *args):
@@ -2346,7 +2387,9 @@ class foe:
 
     def updateStats(self):
         """Update self's stats every frame."""
+
         self.speed = 1
+        self.idleSoundCooldown -= GAMESPEED
 
         # Reduce the duration of modifications to self's movement and remove them as needed.
         for modifier in self.movementModifiers:
