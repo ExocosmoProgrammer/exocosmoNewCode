@@ -6,7 +6,7 @@ import pygame
 import copy
 
 from definitions import draw, drawToFullScreen, lesser, checkMouseCollision, loadWithPickle, saveWithPickle,\
-    greater, sign, pointDistance, percentChance, getPath, getDegrees, sqrt, blitWithOffset
+    greater, sign, pointDistance, percentChance, getPath, getDegrees, sqrt, blitWithOffset, playSoundEffect
 from droppedItem import droppedItem
 import random
 from variables import display, IMAGES, width, height, GAMESPEED, diagonal, relatedSongsDict
@@ -17,12 +17,15 @@ from bullets import bullet
 from foe import foe
 from displayInfo import displayInfo
 from intermissionScreen import intermissionScreen
+from damagingTrap import damagingTrap
+from teleporter import teleporter
 
 pygame.mixer.init()
 pygame.mixer.music.set_volume(1)
 displayVars = displayInfo()
 displayVars.screenShakeDuration = 0
 displayVars.screenOffset = [0, 0]
+
 
 # Create some intermission screens.
 introductoryIntermission = intermissionScreen('Your ship has crashed. You look around and notice that your ship is on '
@@ -36,9 +39,11 @@ shipClearedIntermission = intermissionScreen('You destroyed your ship\'s malfunc
 # Do other stuff.
 
 
-def play(song, saveSong=True):
+def play(song, saveSong=True, volume=0.15):
     """Play song."""
     global positionInSong
+
+    pygame.mixer.music.set_volume(volume)
 
     if song != pro.song:
         pygame.mixer.music.load(f'music/{song}')
@@ -54,6 +59,7 @@ enemyBullets = []
 positionInSong = 0
 pro = player()
 play('littleFugue.mp3')
+pro.showMainJournal()
 startButton = button('whiteStartButton.png', width * 41 / 50, height * 7 / 12,
                      spriteWhenTouchingMouse='redStartButton.png')
 exitButton = button('whiteExitButton.png', width * 41 / 50, height * 17 / 24,
@@ -111,7 +117,7 @@ def load():
         pro.vr = 0
 
         for room in rooms.rooms.values():
-            #room.getUpdate()
+            room.getUpdate()
 
             for enemy in room.foes:
                 enemy.getUpdate()
@@ -155,6 +161,14 @@ def save():
     if True:
         saveWithPickle(f'playerSave{file}.pickle', pro)
         saveWithPickle(f'worldSave{file}.pickle', rooms)
+
+
+def handleSpecialAreas():
+    """Executes effects for special areas where the player is."""
+
+    for i in proRoom().specialRects.keys():
+        if pro.hitbox.checkCollision(i):
+            exec(proRoom().specialRects[i])
 
 
 def drawGame():
@@ -210,14 +224,12 @@ def drawGame():
 
                 blitWithOffset(IMAGES[enemy.delaySprite], enemy.place, displayVars.screenOffset)
 
-        for projectile in pro.bullets + enemyBullets:
+        for projectile in pro.bullets + enemyBullets + [i for i in proRoom().enemyBullets if i.linger > 0]:
             if projectile.delay <= 0:
                 draw(projectile, projectile.rotation, offset=displayVars.screenOffset)
 
             else:
                 blitWithOffset(IMAGES[projectile.getSpriteWhenDelayed()], projectile.place, displayVars.screenOffset)
-
-            projectile.hitbox.showCollision(pro.hitbox)
 
         for obj in currentRoom.environmentObjects:
             if obj.place.bottom > pro.place.bottom:
@@ -323,7 +335,7 @@ def moveBullets():
         else:
             projectile.delay -= GAMESPEED
 
-    for projectile in enemyBullets:
+    for projectile in enemyBullets + [i for i in pro.proRoom().enemyBullets if i.linger > 0]:
         if projectile.delay <= 0:
             projectile.move()
 
@@ -434,7 +446,7 @@ def checkCollisionWithFoe(projectile, foe):
                 if pro.potionRechargeProgress >= 40:
                     pro.potionRechargeProgress = 40
                     pro.canRechargePotion = False
-                    pro.potions = lesser(pro.potions + 1, pro.maxPotions)
+                    pro.getPotion()
 
         projectile.piercing -= 1
 
@@ -451,6 +463,9 @@ def checkCollisionsToFoes():
     for projectile in pro.bullets:
         for foe in currentRoom.foes:
             checkCollisionWithFoe(projectile, foe)
+
+            if projectile.linger <= 0:
+                break
 
 
 def checkCollisionsToEnvironmentObjects():
@@ -501,33 +516,33 @@ def removeFoes():
     """removeFoes() gets rid of foes that have no hp left and handles other procedures for when
     foes are gotten rid of."""
 
-    for foe in currentRoom.foes:
-        if foe.hp <= 0:
-            for debuff in foe.debuffs:
+    for enemy in currentRoom.foes:
+        if enemy.hp <= 0:
+            for debuff in enemy.debuffs:
                 exec(debuff.effectUponEnding)
 
-            while foe in currentRoom.foes:
-                currentRoom.foes.remove(foe)
+            while enemy in currentRoom.foes:
+                currentRoom.foes.remove(enemy)
 
-            while foe in pro.aggressiveFoes:
-                pro.aggressiveFoes.remove(foe)
+            while enemy in pro.aggressiveFoes:
+                pro.aggressiveFoes.remove(enemy)
 
-            if foe.deathAnimation is not None:
-                currentRoom.temporaryAnimations.append(temporaryAnimation(foe.deathAnimation, foe.x, foe.y))
+            if enemy.deathAnimation is not None:
+                currentRoom.temporaryAnimations.append(temporaryAnimation(enemy.deathAnimation, enemy.x, enemy.y))
 
-            if foe.spawnsOnDefeat is not None:
+            if enemy.spawnsOnDefeat is not None:
 
-                for enemy in foe.spawnsOnDefeat:
-                    enemy.spawnDelay = 1000
-                    enemy.yBoundary = foe.yBoundary
+                for otherEnemy in enemy.spawnsOnDefeat:
+                    otherEnemy.spawnDelay = otherEnemy.spawnDelay if otherEnemy.spawnDelay else 1000
+                    otherEnemy.yBoundary = enemy.yBoundary
 
-                currentRoom.foes += foe.spawnsOnDefeat
+                currentRoom.foes += enemy.spawnsOnDefeat
 
-            for thing in foe.loot:
+            for thing in enemy.loot:
                 if percentChance(thing[1]):
-                    currentRoom.droppedItems.append(droppedItem(foe.x, foe.y, thing[0].sprite, thing[0].item))
+                    currentRoom.droppedItems.append(droppedItem(enemy.x, enemy.y, thing[0].sprite, thing[0].item))
 
-            if foe.specialSong is not None:
+            if enemy.specialSong is not None:
                 playSpecialSong = False
 
                 for enemy in proRoom().foes:
@@ -538,6 +553,8 @@ def removeFoes():
 
                 if not playSpecialSong:
                     play(proRoom().combatSong if proRoom().foes else proRoom().calmSong)
+
+            exec(enemy.deathEffect)
 
             if not currentRoom.foes:
                 roomClearingProcedure()
@@ -574,12 +591,11 @@ def roomClearingProcedure():
                     for i in range(6):
                         rooms.rooms[(0, i, 10)].foesUponRespawn = []
 
-                    shipClearedIntermission.play()
+                    shipClearedIntermission.play(initialMusic='Crashed.mp3')
 
             save()
 
     else:
-        currentRoom.foesUponRespawn = []
         play(proRoom().calmSong)
         save()
 
@@ -621,6 +637,7 @@ def roomSwitchingProcedure():
     #switchMusic()
     global currentRoom
     clearBullets()
+    currentRoom.temporaryAnimations = []
     currentRoom = proRoom()
     pro.bullets = []
     pro.invincibility = 200
@@ -710,6 +727,7 @@ def runGame():
     drawGame()
     handleScreenShake()
     event = pro.actions(offset=displayVars.screenOffset)
+    handleSpecialAreas()
 
     if event:
         # TODO make this block's work be done in pro.py.
@@ -747,6 +765,9 @@ def respawn():
         if room.environmentObjectsUponRespawn is not None:
             room.environmentObjects = room.environmentObjectsUponRespawn.copy()
 
+        room.enemyBullets = copy.deepcopy(room.bulletsOnRespawn)
+        room.specialRects = copy.deepcopy(room.specialRectsOnRespawn)
+
         if room.respawnsFoes:
             room.foes = [copy.deepcopy(enemy) for enemy in room.foesUponRespawn]
             room.wave = -1
@@ -759,6 +780,9 @@ def respawn():
                     waveAdded.append(copy.deepcopy(j))
 
                 room.waves.append(waveAdded)
+
+        if room.resetsDamagingTrapsOnRespawn:
+            room.damagingTraps = copy.deepcopy(room.damagingTrapsOnRespawn)
 
         for enemy in room.foes:
             enemy.hp = enemy.initialHp
@@ -790,4 +814,5 @@ while True:
             save()
             sys.exit(0)
 
+    playSoundEffect('death.wav', volume=0.2)
     respawn()
