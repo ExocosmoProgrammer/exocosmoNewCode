@@ -4,15 +4,19 @@ import pygame
 import worldFile
 import copy
 
-from variables import IMAGES, GAMESPEED, display, MOVESPEED, width, height, recipes, fullscreenRect
+from variables import (IMAGES, GAMESPEED, display, MOVESPEED, width, height, recipes, fullscreenRect,
+                       descriptionsPerCritter, descriptionsPerItem)
 from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle, \
-    greater, getRadians, blitWithOffset, fillWithOffset
+    greater, getRadians, blitWithOffset, fillWithOffset, camelCaseToNormalText, normalTextToCamelCase, getEvents, \
+    temporarilyPlay, playSoundEffect
 from rects import rect
 from bullets import bullet
 from item import item
 from word import word
 from plainSprites import plainSprite
 from debuff import debuff
+from textBox import textBox
+import traceback
 
 nanotechBulletImplosionAnimation = [f'nanotechRevolverBulletImpactFrame{i}.png' for i in range(1, 7) for j in
                                     range(10)]
@@ -74,9 +78,9 @@ class player:
         self.speed = 1
         self.itemFunctions = {'nanotechRevolver': self.useNanotechRevolver,
                               'lumisFlamethrower': self.useLumisFlamethrower, 'jellyfish': self.useJellyfish,
-                              'lumiswood bow': self.useLumisWoodBow, 'bag of sand': self.useBagOfSand}
+                              'lumiswoodBow': self.useLumisWoodBow, 'bagOfSand': self.useBagOfSand}
         self.altItemFunctions = {'lumisFlamethrower': self.useLumisFlamethrowerAlt,
-                                 'lumiswood bow': self.useLumisWoodBowAlt, 'bag of sand': self.useBagOfSandAlt}
+                                 'lumiswoodBow': self.useLumisWoodBowAlt, 'bagOfSand': self.useBagOfSandAlt}
         self.inventory = [item('empty', 'invisiblePixels.png', stackSize=1) for i in range(101)]
         self.activeItem = self.inventory[0]
         self.activeItemSlot = 0
@@ -101,12 +105,24 @@ class player:
         self.potionsFilledBar = plainSprite("potionFilledBar.png", width / 25, height * 71 / 90)
         self.song = 'Crashed.mp3'
         self.cooldownForControlledMovement = 0
+        self.walkingSoundCooldown = 0
+
+        # self.healingCooldown exists so that two of the healing sound effect cannot overlap.
+        self.healingCooldown = 0
+
+        # self.journalInfo lists what entries the player has for certain categories and what the entries are.
+        self.journalInfo = {'creatures': {}, 'items': {},
+                            'biomes': {'ship': 'The ship is your crashed ship, which no longer functions.'},
+                            'protagonist': {'healing': 'To heal, you drink potions. Inflicting sufficient damage to '
+                                                       'enemies gives you another potion unless you are holding the '
+                                                       'most potions that you can or have regenerated a potion since '
+                                                       'last using one.'}}
 
         for i in range(3):
             for j in range(10):
                 self.inventoryBoxes.append(plainSprite(
                     'inventoryBox.png', j * boxWidth * 2 + width * 1 / 30 + boxWidth / 2,
-                    i * 3 * boxHeight + height * 7 / 30 + boxHeight / 2))
+                                        i * 3 * boxHeight + height * 7 / 30 + boxHeight / 2))
 
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
@@ -118,30 +134,50 @@ class player:
         self.animationFrame = 0
 
     def gainItem(self, itemGained):
-        """self.gainItem(itemGained) adds itemGained to the player's inventory."""
+        """Adds as much as possible of itemGained to the player's inventory. Returns however much of itemGained could
+        not be added to the inventory."""
+
         activeItemNumber = self.inventory.index(self.activeItem)
+
+        # qtyLeft represents how much of itemGained has not yet been added to the player's inventory.
         qtyLeft = itemGained.qty
 
+        # The following loop will end with a return statement if not all of itemGained can be picked up.
         while qtyLeft > 0:
             self.emptySlots = [i for i in self.inventory[0:30] if i.name == 'empty']
+
+            # similarSlots is a list of self's items of the same type as itemGained to which itemGained can be added.
             similarSlots = [i for i in self.inventory[0:30] if i.name == itemGained.name and i.qty < i.stackSize]
 
+            # Do some stuff if similarSlots is empty.
             if not similarSlots:
+                # If the player has at least 30 slots full of items, then itemGained cannot be picked up.
                 if len([i for i in self.inventory if i.name != 'empty']) >= 30:
                     return qtyLeft
 
+                # Otherwise, itemGained will be put in an empty slot.
                 newItem = self.inventory[self.inventory.index(self.emptySlots[0])] = copy.copy(itemGained)
                 qtyLeft = 0
 
+                # Switch self.activeItem to be itemGained if itemGained was put in the active item slot.
                 if self.inventory.index(newItem) == activeItemNumber:
                     self.activeItem = newItem
 
-                return 0
+                # If possible, add the journal entry for the new item to the player's journal.
+                try:
+                    self.journalInfo['items'][newItem.name] = descriptionsPerItem[newItem.name]
 
+                except KeyError:
+                    pass
+
+            # Do other stuff otherwise.
             else:
+                # Add some of itemGained to an item of the same type in the player's inventory.
                 similarSlot = random.choice(similarSlots)
                 qtyAdded = lesser(qtyLeft, similarSlot.stackSize - similarSlot.qty)
                 similarSlot.qty += qtyAdded
+
+                # Adjust qtyLeft.
                 qtyLeft -= qtyAdded
 
         return 0
@@ -149,14 +185,24 @@ class player:
     def updateHpRect(self):
         self.hpRect = pygame.Rect(width / 160, height / 90, width * 61 / 400 * self.hp / self.maxHp, height * 9 / 450)
 
-    def hurt(self, damage):
+    def hurt(self, damage, givesInvincibility=True, playHurtSound=True):
         """self.hurt(damage) reduces the player's hp by damage, makes the player temporarily invincible, and update's
         the display that shows the player's hp."""
 
         if damage:
             self.hp -= damage
-            self.invincibility = 250
+            self.invincibility = greater(250 if givesInvincibility else 0, self.invincibility)
             self.updateHpRect()
+
+        if playHurtSound:
+            playSoundEffect('hurt.wav')
+
+
+    def heal(self, hp):
+        """Heal self by hp hp."""
+
+        self.hp = lesser(self.maxHp, self.hp + hp)
+        self.updateHpRect()
 
     def progressAnimation(self):
         """The progressAnimation changes your animation, directionlessAnimation, and sprite as appropriate."""
@@ -195,15 +241,26 @@ class player:
         if self.stamina >= 300 and self.slideTime <= 0:
             self.slideTime = 40
             self.stamina -= 300
-            self.invincibility = 160
+            self.invincibility = 60
+            playSoundEffect('dashing2.wav', volume=0.6)
 
     def usePotion(self):
-        if self.potions:
+        """Makes the player use a potion."""
+
+        if self.potions and self.healingCooldown <= 0:
             self.potions -= 1
             self.hp = lesser(self.hp + 70, self.maxHp)
             self.potionRechargeProgress = 0
             self.canRechargePotion = True
             self.updateHpRect()
+            playSoundEffect('healing.wav')
+            self.healingCooldown = 240
+
+    def getPotion(self):
+        "Gives the player a potion."
+
+        self.potions = lesser(self.potions + 1, self.maxPotions)
+        playSoundEffect('gettingPotion.wav')
 
     def useActiveItem(self, offset=(0, 0)):
         """Makes the player use their active item as appropriate."""
@@ -226,7 +283,6 @@ class player:
                 except KeyError:
                     pass
 
-
     def fireToMouse(self, damage, sprite, speed, knockbackStrength=0, knockbackDuration=50, **kwargs):
         """Fire a projectile towards the mouse."""
 
@@ -243,7 +299,7 @@ class player:
                                    **kwargs))
 
     def fireInConsistentSpread(self, damage, sprite, speed, qty, totalAngleInRadians, animation=None,
-                              impactAnimation=None, linger=1600, knockbackStrength=0, knockbackDuration=50, **kwargs):
+                               impactAnimation=None, linger=1600, knockbackStrength=0, knockbackDuration=50, **kwargs):
         """Fire a spread of projectiles centered on the mouse."""
 
         # Calculate the angle between each projectile.
@@ -305,15 +361,15 @@ class player:
 
     def useNanotechRevolver(self, **kwargs):
         """The useNanotechRevolver function will be your attack while your active item is the nanotechRevolver."""
-        self.destroyFoes()
         self.fireToMouse(1, 'basicRangeProjectile_d.png', 6.5,
                          impactAnimation=nanotechBulletImplosionAnimation)
         self.fireCooldown = 60
+        playSoundEffect('nanotechRevolver.wav')
 
     def useLumisFlamethrower(self, **kwargs):
         self.fireInConsistentSpread(0.3, 'spiderProjectile1.png', 8, 5, math.pi / 8,
-                                   animation=[f'spiderProjectile{i}.png' for i in [1, 2] for j in range(30)],
-                                   linger=100)
+                                    animation=[f'spiderProjectile{i}.png' for i in [1, 2] for j in range(30)],
+                                    linger=100)
         self.fireCooldown = 45
 
     def useLumisFlamethrowerAlt(self, **kwargs):
@@ -335,6 +391,7 @@ class player:
                          foeContactEffect='projectile.source.cooldown = 5400;')
         self.bullets[-1].debuffInflictions[0].source = self.bullets[-1]
         self.activeItem.cooldown = 900
+        playSoundEffect('jellyfishThrown.wav')
 
     def useLumisWoodBow(self, **kwargs):
         self.fireToMouse(2.5, 'spiderProjectile1.png', 10)
@@ -362,7 +419,7 @@ class player:
 
             # Make the projectile slow down over time.
             self.bullets[i].movementByDuration = (f"[{initialHr} * math.e ** (-self.currentDuration / 180),"
-                                                   f"{initialVr} * math.e ** (-self.currentDuration / 180)]")
+                                                  f"{initialVr} * math.e ** (-self.currentDuration / 180)]")
 
         # Set the bag of sand's standard cooldown.
         self.activeItem.standardCooldown = 3600
@@ -380,9 +437,10 @@ class player:
 
         # Make the projectile knock back enemies, make the screen shake, and pause the game upon contact with stunned
         # foes.
-        self.bullets[-1].foeContactEffect = (f"if foe.stun > 0: foe.movementModifiers.append([{hr / 2}, {vr / 2}, 360]);"
-                                             f" displayVars.screenShakeDuration = "
-                                             f"greater(displayVars.screenShakeDuration, 50); time.sleep(0.03)")
+        self.bullets[-1].foeContactEffect = (
+            f"if foe.stun > 0: foe.movementModifiers.append([{hr / 2}, {vr / 2}, 360]);"
+            f" displayVars.screenShakeDuration = "
+            f"greater(displayVars.screenShakeDuration, 50); time.sleep(0.03)")
 
         # Set self.fireCooldown.
         self.fireCooldown = 180
@@ -456,6 +514,9 @@ class player:
                 else:
                     self.mapShown = 1
 
+            elif event.key == pygame.K_j:
+                self.showMainJournal()
+
             elif event.key == pygame.K_0:
                 self.activeItem = self.inventory[9]
                 self.activeItemSlot = 9
@@ -465,6 +526,9 @@ class player:
 
             elif pygame.key.get_mods() & pygame.KMOD_SHIFT and not self.sprinting:
                 self.dash()
+
+            elif event.key == pygame.K_k:
+                self.destroyFoes()
 
             else:
                 for i in range(9):
@@ -498,8 +562,26 @@ class player:
         else:
             self.speed = 4
 
+    def updateJournalEntriesForCritters(self):
+        """Adds critters in the current room to the journal."""
+
+        for enemy in self.proRoom().foes:
+            try:
+                self.journalInfo['creatures'][enemy.type] = descriptionsPerCritter[enemy.type]
+
+            except KeyError:
+                pass
+
+        for critter in self.proRoom().passiveCritters:
+            try:
+                self.journalInfo['creatures'][critter.type] = descriptionsPerCritter[critter.type]
+
+            except KeyError:
+                pass
+
     def updateStats(self):
         """The updateStats method should modify your attributes each frame."""
+
         self.slideTime -= GAMESPEED
         self.stamina = lesser(self.stamina + GAMESPEED, 500)
         self.fireCooldown -= GAMESPEED
@@ -507,6 +589,9 @@ class player:
         self.timeSincePressingSpace += GAMESPEED
         currentRoom = self.proRoom()
         self.cooldownForControlledMovement -= GAMESPEED
+        self.hurt(self.proRoom().constantDamage, givesInvincibility=False, playHurtSound=False)
+        self.walkingSoundCooldown -= GAMESPEED
+        self.healingCooldown -= GAMESPEED
 
         for i in self.inventory[0: 30]:
             i.cooldown -= GAMESPEED
@@ -523,6 +608,9 @@ class player:
             self.oxygen = self.maxOxygen
 
         self.updateSpeed()
+
+        # Add creatures to the journal as needed.
+        self.updateJournalEntriesForCritters()
 
     def updateItemPositions(self):
         for i in range(30):
@@ -558,7 +646,7 @@ class player:
         """Show self's hotbar."""
 
         for i in range(10):
-            place = pygame.Rect(width * ((i + 1) /11 - 3 / 160), height * 14 / 15, width * 3 / 80, height / 15)
+            place = pygame.Rect(width * ((i + 1) / 11 - 3 / 160), height * 14 / 15, width * 3 / 80, height / 15)
             blitWithOffset(IMAGES[self.inventoryBoxes[i].sprite], place, offset)
             itemShown = self.inventory[i]
             slotNumberMarker = word(place.left - width / 160, place.top - height / 90, str(i + 1 if i < 9 else 0),
@@ -581,12 +669,12 @@ class player:
 
             if itemShown.standardCooldown > 0:
                 cooldownMarker = word(place.left + height / 45, place.centery,
-                                      str(int(itemShown.standardCooldown / 180) + 1),'finalNumber')
+                                      str(int(itemShown.standardCooldown / 180) + 1), 'finalNumber')
                 cooldownMarker.draw(offset=offset)
 
             if itemShown.altCooldown > 0:
                 cooldownMarker = word(place.left - height / 45, place.centery,
-                                      str(int(itemShown.altCooldown / 180) + 1),'finalNumber')
+                                      str(int(itemShown.altCooldown / 180) + 1), 'finalNumber')
                 cooldownMarker.draw(offset=offset)
 
     def showInfo(self, offset=(0, 0)):
@@ -666,8 +754,8 @@ class player:
 
                             if draggedItem.qty == 0:
                                 self.inventory[self.inventory.index(draggedItem)] = item('empty',
-                                                                                   'invisiblePixels.png',
-                                                                                   stackSize=1)
+                                                                                         'invisiblePixels.png',
+                                                                                         stackSize=1)
 
                         else:
                             thing.dragged = 1
@@ -728,24 +816,138 @@ class player:
     def showMap(self, offset=(0, 0)):
         fillWithOffset((0, 0, 0), fullscreenRect, offset)
         for coordinate in list(rooms.rooms.keys()):
-            if coordinate[2] == self.room[2] and abs(self.room[1] - coordinate[1]) < 3 \
-                    and abs(self.room[0] - coordinate[0]) < 3:
+            if coordinate[2] == self.room[2] and (abs(self.room[1] - coordinate[1]) < 3 \
+                    and abs(self.room[0] - coordinate[0]) < 3 or True):
                 blitWithOffset(IMAGES[rooms.rooms[coordinate].mapMarker],
-                             pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
-                                         height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
-                                         9 * width / 320, 8 * height / 225), offset)
+                               pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
+                                           height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
+                                           9 * width / 320, 8 * height / 225), offset)
 
                 if 5 > rooms.rooms[coordinate].difficulty > -1:
                     blitWithOffset(IMAGES['blobSummon.png'],
-                                 pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
-                                             height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
-                                             9 * width / 320, 8 * height / 225), offset)
+                                   pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
+                                               height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
+                                               9 * width / 320, 8 * height / 225), offset)
 
                 if coordinate == tuple(self.room):
                     blitWithOffset(IMAGES['playerRoomMapImage.png'],
-                                 pygame.Rect(
-                                     width * 311 / 640, height * 434 / 900,
-                                     9 * width / 320, 8 * height / 225), offset)
+                                   pygame.Rect(
+                                       width * 311 / 640, height * 434 / 900,
+                                       9 * width / 320, 8 * height / 225), offset)
+
+    def showMainJournal(self):
+        """Shows the journal's main categories."""
+
+        # The next loop will be exited with a return statement.
+        while True:
+            # Color the whole display light yellow.
+            display.fill((255, 246, 180), fullscreenRect)
+
+            # Assign boxes. We need to keep track of boxes drawn because each one must be able to check collision.
+            boxes = []
+
+            # Draw a box for each main category of journal entries. Save boxes to the boxes variable.
+            for i in range(len(self.journalInfo.keys())):
+                # I'd rather not draw camel case for the player.
+                box = textBox(camelCaseToNormalText(list(self.journalInfo.keys())[i]), 'newLetter',
+                              'invisiblePixels.png', 0, height * i / 10, width)
+                boxes.append(box)
+                box.draw()
+
+            # Handle MOUSEBUTTONDOWN events.
+            if pygame.mouse.get_pressed()[0] and getEvents({pygame.MOUSEBUTTONDOWN: None}):
+                # If the player pressed the mouse and the left button is pressed, check collisions with boxes.
+                for box in boxes:
+                    # If the player clicked on a box, go to the coresponding section of the journal.
+                    if checkMouseCollision(box.hitbox):
+                        # We converted the boxes' text to normal text, so it must be turned back to camel case.
+                        self.showOptionsInCategory(normalTextToCamelCase(box.text))
+
+            # Exit if the escape key was pressed.
+            if getEvents({pygame.KEYDOWN: [pygame.K_ESCAPE]}):
+                return
+
+            # Update the display.
+            pygame.display.flip()
+
+    def showOptionsInCategory(self, category):
+        """Show options for entries on a given category in the journal."""
+
+        # verticalOffset will determine where boxes should be. It is used so that the player can scroll.
+        verticalOffset = 0
+
+        # The next loop will be exited with a return statement.
+        while True:
+            # Color the whole display light yellow.
+            display.fill((255, 246, 180), fullscreenRect)
+
+            # Do other things.
+            if list(self.journalInfo[category].keys()):
+                # Assign boxes. We need to keep track of boxes drawn because each one must be able to check collision.
+                boxes = []
+
+                # Draw a box for each main category of journal entries. Save boxes to the boxes variable.
+                for i in range(len(self.journalInfo[category].keys())):
+                    # I'd rather not show the text in camel case.
+                    box = textBox(camelCaseToNormalText(list(self.journalInfo[category].keys())[i]), 'newLetter',
+                                  'invisiblePixels.png', 0, height * i / 10 + verticalOffset, width)
+                    boxes.append(box)
+                    box.draw()
+
+                # bottomOfBottomBox is used to determine how far the player can scroll.
+                if boxes:
+                    bottomOfBottomBox = boxes[-1].place.bottom - verticalOffset
+
+                # Handle MOUSEBUTTONDOWN events.
+                if pygame.mouse.get_pressed()[0] and getEvents({pygame.MOUSEBUTTONDOWN: None}):
+                    for box in boxes:
+                        # If the player clicked on a box, go to the coresponding section of the journal.
+                        if checkMouseCollision(box.hitbox):
+                            # Since we converted the boxes' text to normal text, it must be turned back to camel case.
+                            self.showJournalEntry(category, normalTextToCamelCase(box.text))
+
+                # Handle KEYDOWN events.
+                for event in getEvents({pygame.KEYDOWN: [pygame.K_ESCAPE, pygame.K_DOWN, pygame.K_UP]}):
+                    match event.key:
+                        # Return to the main journal if escape was pressed.
+                        case pygame.K_ESCAPE:
+                            return
+
+                        # Scroll down if the down arrow was pressed.
+                        case pygame.K_DOWN:
+                            verticalOffset = lesser(greater(verticalOffset - height, height - bottomOfBottomBox), 0)
+
+                        # Scroll up if the up arrow was pressed.
+                        case pygame.K_UP:
+                            verticalOffset = lesser(greater(verticalOffset + height, height - bottomOfBottomBox), 0)
+
+            # If there are no entries to show, then just exit if the escape key was pressed.
+            else:
+                if getEvents({pygame.KEYDOWN: [pygame.K_ESCAPE]}):
+                    return
+
+            # Update the display.
+            pygame.display.flip()
+
+    def showJournalEntry(self, category, entry):
+        """Shows a given journal entry."""
+
+        # The next loop will be exited with a return statement.
+        while True:
+            # Color the whole display light yellow.
+            display.fill((255, 246, 180), fullscreenRect)
+
+            # Show the entry.
+            box = textBox(self.journalInfo[category][entry], 'newLetter', 'invisiblePixels.png', 0,
+                          0, width, height / 20)
+            box.draw()
+
+            # Return to the options for the current category if the escape key was pressed..
+            if getEvents({pygame.KEYDOWN: [pygame.K_ESCAPE]}):
+                return
+
+            # Update the display.
+            pygame.display.flip()
 
     def updateHitbox(self):
         """Updates the player's hitbox."""
@@ -781,7 +983,8 @@ class player:
 
         if self.place.left < self.proRoom().leftXBoundary:
             if (self.room[0] - 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
-                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected or not \
+                        self.proRoom().playerXRangeToGoLeft[0] <= self.y <= self.proRoom().playerXRangeToGoLeft[1]:
                     self.place.left = self.proRoom().leftXBoundary
 
                 else:
@@ -795,7 +998,8 @@ class player:
 
         elif self.place.right > self.proRoom().rightXBoundary:
             if (self.room[0] + 1, self.room[1], self.room[2]) in list(rooms.rooms.keys()):
-                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected or not \
+                        self.proRoom().playerXRangeToGoRight[0] <= self.y <= self.proRoom().playerXRangeToGoRight[1]:
                     self.place.right = self.proRoom().rightXBoundary
 
                 else:
@@ -809,7 +1013,8 @@ class player:
 
         if self.place.top < self.proRoom().yBoundaries:
             if (self.room[0], self.room[1] + 1, self.room[2]) in list(rooms.rooms.keys()):
-                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected or not \
+                        self.proRoom().playerXRangeToGoUp[0] <= self.x <= self.proRoom().playerXRangeToGoUp[1]:
                     self.place.top = self.proRoom().yBoundaries
 
                 else:
@@ -823,7 +1028,8 @@ class player:
 
         elif self.place.bottom > self.proRoom().bottomYBoundary:
             if (self.room[0], self.room[1] - 1, self.room[2]) in list(rooms.rooms.keys()):
-                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected:
+                if (self.proRoom().locks and self.proRoom().foes) or self.proRoom().disconnected or not \
+                        self.proRoom().playerXRangeToGoDown[0] <= self.x <= self.proRoom().playerXRangeToGoDown[1]:
                     self.place.bottom = self.proRoom().bottomYBoundary
 
                 else:
@@ -836,6 +1042,10 @@ class player:
             self.y = self.place.centery
 
         self.updateHitbox()
+
+        if (self.hr or self.vr) and self.walkingSoundCooldown <= 0 and self.slideTime <= 0:
+            playSoundEffect('running.wav' if self.sprinting else 'walking.wav', volume=0.3 if self.sprinting else 1)
+            self.walkingSoundCooldown = 50 if self.sprinting else 100
 
         if self.sprinting or self.slideTime > 0:
             return 1
@@ -896,3 +1106,12 @@ class player:
         for key in stats.keys():
             if not hasattr(self, key):
                 self.__setattr__(key, stats[key])
+
+    def test(self, method):
+        try:
+            method()
+
+        except Exception as error:
+            print("Caught an exception:", error)
+            print("Exception type:", type(error))
+            print("Traceback:", traceback.format_exc())
