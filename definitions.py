@@ -2,6 +2,7 @@ import math
 import pickle
 import random
 import pygame
+import pydub
 
 from pygame import mixer
 from variables import display, IMAGES, BACKGROUNDS, width, height, fullscreenRect, playerHeight, getProperPath
@@ -212,13 +213,6 @@ def loadWithPickle(file: str):
         return pickle.load(fileLoaded)
 
 
-# def play(song):
-#     mixer.init()
-#     mixer.music.load(f'music/{song}')
-#     mixer.music.set_volume(0)
-#     mixer.music.play(-1)
-
-
 def checkMouseCollision(unrotatedRectangle):
     """checkMouseCollision(x) returns 1 if the mouse is over rect x. Otherwise, checkMouseCollision(x) returns 0."""
     unrotatedRectangle.getMajorInfo()
@@ -267,3 +261,86 @@ def getYBoundaryFromPlace(place, playerYBoundary, hitbox):
     """getYBoundaryFromPlace(x, y, z) returns the top y boundary that an object with place x and hitbox z should have
     in a room where the player has top y boundary y."""
     return playerYBoundary + playerHeight - place.height + hitbox.height
+
+
+def camelCaseToNormalText(text: str, capitalizeStart=True, titleCase=True):
+    """Converts text from camel case to normal text."""
+
+    # finalText will be returned.
+    finalText = text[0].upper() if capitalizeStart or titleCase else text[0]
+
+    # Add to the finalText.
+    for i in range(1, len(text)):
+        # If the next character is capital, then a space is added to separate words. The next
+        # character may be made lowercase.
+        if text[i].isupper():
+            finalText += ' '
+            finalText += text[i] if titleCase else text[i].lower()
+
+        # Otherwise, just add the next character.
+        else:
+            finalText += text[i]
+
+    # Return the desired text.
+    return finalText
+
+
+def normalTextToCamelCase(text):
+    """Converts normal text to text in camel case."""
+
+    # finalText will be returned.
+    finalText = text[0].lower()
+
+    # capitalizeNext determines whether the next character should be capital.
+    capitalizeNext = False
+
+    # Add to finalText.
+    for i in range(1, len(text)):
+        # If text[i] is a space, then the next character should be capitalized.
+        if text[i] == ' ':
+            capitalizeNext = True
+
+        # Otherwise, add text[i] in the desired case to finalText and set capitalizeNext to False.
+        else:
+            finalText += text[i].upper() if capitalizeNext else text[i].lower()
+            capitalizeNext = False
+
+    # Return the result.
+    return finalText
+
+
+def getEvents(eventTypes: dict):
+    """Returns events of specified types and removes them from the event queue while keeping other events. eventTypes
+    should be a dictionary where the keys are accepted event types and the values are lists of accepted keys when
+    applicable."""
+
+    # returnedEvents will be returned.
+    returnedEvents = []
+
+    # Add events to returnedEvents and remove accepted events from the event queue.
+    for event in pygame.event.get():
+        # If event's type is accepted and the key is accepted if applicable, then add event to returnedEvents.
+        if event.type in eventTypes.keys() and (not hasattr(event, 'key') or event.key in eventTypes[event.type]):
+            returnedEvents.append(event)
+
+        # Otherwise, put the event back in the event queue.
+        else:
+            pygame.event.post(event)
+
+    # Return returnedEvents.
+    return returnedEvents
+
+
+def temporarilyPlay(music):
+    pygame.mixer.music.load(f'music/{music}')
+    pygame.mixer.music.play(-1)
+
+
+def playSoundEffect(effect, volume=0.3):
+    """Play effect."""
+
+    soundEffect = pygame.mixer.Sound(f'sounds/{effect}')
+    soundEffect.set_volume(volume)
+    soundEffect.play()
+
+
