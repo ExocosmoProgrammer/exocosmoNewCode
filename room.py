@@ -50,6 +50,20 @@ class room:
         self.roomThatCanBeManuallyTeleportedTo = None
         self.environmentObjectsUponRespawn = None
         self.isBossRoom = False
+        self.constantDamage = 0
+        self.resetsBulletsOnRespawn = False
+        self.resetsDamagingTrapsOnRespawn = False
+
+        # The next four attributes determine the horizontal or vertical range that the player's center must be in for
+        # the player to exit in each direction.
+        self.playerXRangeToGoUp = [0, width]
+        self.playerXRangeToGoDown = [0, width]
+        self.playerXRangeToGoLeft = [0, height]
+        self.playerXRangeToGoRight = [0, height]
+
+        # Each key in specialRects should be a rect object. Each value in specialRects should be a string. For each
+        # key, if the player collides with the key, then the corresponding value should be executed.
+        self.specialRects = {}
 
         match biome:
             case 'desert':
@@ -104,6 +118,7 @@ class room:
                 self.usuallyLocks = True
                 self.background = 'shipBackgroundWithDoor.bmp'
                 self.calmSong = self.combatSong = 'Crashed.mp3'
+                self.playerXRangeToGoUp = self.playerXRangeToGoDown = [width * 55 / 112, width * 61 / 112]
 
             case 'desertCaveForest':
                 self.difficulty = -2
@@ -242,6 +257,10 @@ class room:
 
         if not hasattr(self, 'foesUponRespawn'):
             self.getFoesUponRespawn()
+
+        self.bulletsOnRespawn = copy.deepcopy(self.enemyBullets) if self.resetsBulletsOnRespawn else []
+        self.damagingTrapsOnRespawn = copy.deepcopy(self.damagingTraps)
+        self.specialRectsOnRespawn = copy.deepcopy(self.specialRects)
 
     def getFoesUponRespawn(self):
         self.foesUponRespawn = [copy.deepcopy(enemy) for enemy in self.foes]
