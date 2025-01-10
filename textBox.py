@@ -1,6 +1,8 @@
 from word import word
 from definitions import draw
 from variables import IMAGES, height, width
+from rects import rect
+
 import pygame
 
 
@@ -11,6 +13,7 @@ class textBox:
         font font."""
         self.sprite = boxSprite
         self.words = []
+        self.text = text
         text = text.upper()
         wordsLeft = text.split()
         currentRight = left + maximumWidth * 2 / 33
@@ -33,6 +36,7 @@ class textBox:
         self.height = currentY + height / 21 - top
         self.width = maximumWidth
         self.place = pygame.Rect(left, top, maximumWidth, self.height)
+        self.hitbox = rect(self.place)
 
     def draw(self, offset=(0, 0)):
         draw(self, scaling=(self.width, self.height), offset=offset)
