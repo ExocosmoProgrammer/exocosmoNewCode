@@ -263,35 +263,36 @@ class passiveCritter:
 
         if hitObject or leftBounds:
             self.faceProperly()
+            tryAgain = True
+            attempts = 0
 
-            try:
-                tryAgain = True
-
-                while tryAgain:
-                    tryAgain = False
-                    self.x += self.hr
-                    self.y += self.vr
-                    self.faceProperly()
-                    self.updateHitboxAndPlaceNormally()
-
-                    if 0 <= self.hitbox.left and self.hitbox.right <= width and self.hitbox.top >= self.yBoundaries \
-                            and self.hitbox.bottom <= self.room.bottomYBoundary:
-                        for i in self.room.environmentObjects:
-                            if i.hitbox.checkCollision(self.hitbox):
-                                tryAgain = True
-
-                    else:
-                        tryAgain = True
-
-            except RecursionError:
-                if hitObject:
-                    self.getOutOfObjects()
-
-                if leftBounds:
-                    self.x = greater(lesser(self.x, width - self.hitbox.width / 2), self.hitbox.width / 2)
-                    self.y = greater(lesser(self.y, height - self.hitbox.height / 2), self.hitbox.height / 2)
-
+            while tryAgain:
+                attempts += 1
+                tryAgain = False
+                self.x += self.hr
+                self.y += self.vr
+                self.faceProperly()
                 self.updateHitboxAndPlaceNormally()
+
+                if 0 <= self.hitbox.left and self.hitbox.right <= width and self.hitbox.top >= self.yBoundaries \
+                        and self.hitbox.bottom <= self.room.bottomYBoundary:
+                    for i in self.room.environmentObjects:
+                        if i.hitbox.checkCollision(self.hitbox):
+                            tryAgain = True
+
+                else:
+                    tryAgain = True
+
+                if attempts > 1000:
+                    if hitObject:
+                        self.getOutOfObjects()
+
+                    if leftBounds:
+                        self.x = greater(lesser(self.x, width - self.hitbox.width / 2), self.hitbox.width / 2)
+                        self.y = greater(lesser(self.y, height - self.hitbox.height / 2), self.hitbox.height / 2)
+
+                    self.updateHitboxAndPlaceNormally()
+                    break
 
     def updateHitboxAndPlaceNormally(self):
         self.place.centerx = self.x
