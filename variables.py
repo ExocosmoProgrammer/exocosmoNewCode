@@ -10,7 +10,6 @@ def getProperPath(string):
         os.getcwd() == '/Users/gabrielwheeler' else string
 
 
-
 IMAGES = {}
 display = pygame.display.set_mode((1440, 900))
 pygame.display.toggle_fullscreen()
@@ -105,6 +104,42 @@ combatMusicPerBiome = {('ship', 10): 'Crashed.mp3', ('desert', -1): 'DesertCaveC
 relatedSongs = [['desertCaveLumisLakeAboveWater', 'desertCaveLumisLakeUnderwater'],
                 ['lumisForest.mp3', 'desertCaveCalm.mp3']]
 relatedSongsDict = {}
+descriptionsPerCritter = {'brokenTurret': 'Broken turrets spin around while firing wherever they are facing.',
+                      'flamingRobot': 'Flaming robots move towards some point near the player and leave behind fire.',
+                      'robotBodyguard': 'Robot bodyguards alternate between moving at the player and firing directly '
+                                        'at the player while staying still.',
+                      'desertCaveJellyfish': 'Desert cave jellyfish periodically dash at the player and slow down '
+                                             'over time until dashing again.',
+                      'desertCaveLargeFly': 'Desert cave large flies summon desert cave small flies. Each '
+                                            'desert cave large fly can only have three desert cave small flies at a '
+                                            'time.',
+                      'desertCaveSmallFly': 'Desert cave small flies fire directly at the player.',
+                      'desertCaveMoth': 'Desert cave moths move in semicircular patterns towards the player while '
+                                        'firing clouds of dust.',
+                      'desertCaveSpider': 'Desert cave spiders alternate between dashing at a point near the player '
+                                          'and firing spreads of three projectiles. The spiders pause between attacks.',
+                      'desertCaveFlyMiniboss': 'The desert cave fly miniboss alternates between moving and doing a '
+                                               'different attack. The desert cave fly miniboss can fall onto the '
+                                               'ground, releasing a ring of projectiles. The fly can fire lasers '
+                                               'directly at the player. The fly can spit in rings. It will '
+                                               'periodically summon flies and moths.',
+                      'desertCaveSlug': 'Desert cave slugs wander slowly around.',
+                      'desertCaveButterfly': 'Desert cave butterflies fly around randomly.',
+                      'desertCaveAmphipod': 'Desert cave amphipods dash randomly around and slow down gradually '
+                                            'between dashes.'
+                      }
+descriptionsPerItem = {'nanotechRevolver': 'The nanotech revolver fires bullets with perfect accuracy.',
+                       'lumisFlamethrower': 'The lumis flamethrower fires spreads of several projectiles.',
+                       'lumiswoodBow': 'The lumiswood bow\'s main attack fires a simple projectile. The lumiswood '
+                                       'bow\'s alternate attack fires a projectile that pulls in the player upon '
+                                       'hitting an enemy.',
+                       'jellyfish': 'The jellyfish can be thrown. Upon hitting an enemy, the jellyfish attatches to the'
+                                    ' enemy, slowing it down and inflicting damage over time for thirty seconds, after '
+                                    'which the jellyfish can be thrown again. If the enemy dies while the jellyfish is '
+                                    'attatched or if the jellyfish misses, then the jellyfish can be thrown again after'
+                                    ' five seconds.',
+                       'bagOfSand': 'The bag of sand\'s main attack fires a cloud of sand that stuns enemies. The bag '
+                                    'of sand\'s alternate attack knocks back stunned enemies.'}
 
 for i in relatedSongs:
     for j in i:
