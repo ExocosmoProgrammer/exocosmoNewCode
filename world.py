@@ -1,4 +1,6 @@
 import copy
+import math
+
 import pygame
 
 from room import room
@@ -11,6 +13,7 @@ from damagingTrap import damagingTrap
 from teleporter import teleporter
 from rects import rect
 from definitions import skip
+from bullets import bullet
 
 import random
 
@@ -23,6 +26,8 @@ class world:
                                        difficulty=-2)}
         self.unavailableCoords = [(0, 5, -1), (-1, 6, -1), (1, 6, -1)]
         shipRooms = [room([0, 0, 10], 'ship'),
+
+                     room([1, 0, 10], 'ship'),
 
                      room([0, 1, 10], 'ship', droppedItems=[
                          droppedItem(width / 2, height / 2, 'pistolInInventory.png',
@@ -93,42 +98,193 @@ class world:
                              spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('brokenTurret', width / 2, height / 2,
-                                                         [0, 6, 10])]),
+                                                         [0, 6, 10], empowered=True)]),
                                              foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('robotBodyguard', width / 2, height / 2,
-                                                         [0, 6, 10])]),
+                                                         [0, 6, 10], empowered=True)]),
                                              foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('flamingRobot', width / 2, height / 2,
-                                                         [0, 6, 10])])]),
+                                                         [0, 6, 10], empowered=True)])]),
                          foe('flamingRobot', width / 2, height / 3, [0, 6, 10],
                              spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('brokenTurret', width / 2, height / 2,
-                                                         [0, 6, 10])]),
+                                                         [0, 6, 10], empowered=True)]),
                                              foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('robotBodyguard', width / 2, height / 2,
-                                                         [0, 6, 10])]),
+                                                         [0, 6, 10], empowered=True)]),
                                              foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('flamingRobot', width / 2, height / 2,
-                                                         [0, 6, 10])])]),
+                                                         [0, 6, 10], empowered=True)])]),
                          foe('brokenTurret', width / 2, height / 4, [0, 6, 10],
                              spawnsOnDefeat=[foe('robotBodyguard', width / 2, height / 2, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('brokenTurret', width / 2, height / 2,
-                                                         [0, 6, 10])]),
+                                                         [0, 6, 10], empowered=True)]),
                                              foe('flamingRobot', width / 2, height / 3, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('robotBodyguard', width / 2, height / 2,
-                                                         [0, 6, 10])]),
+                                                         [0, 6, 10], empowered=True)]),
                                              foe('brokenTurret', width / 2, height / 4, [0, 4, 10],
                                                  spawnsOnDefeat=[
                                                      foe('flamingRobot', width / 2, height / 2,
-                                                         [0, 6, 10])])])
-                     ]), ]
+                                                         [0, 6, 10], empowered=True)])])
+                     ]),
+
+                     room([-1, 5, 10], 'ship',
+                          teleporters=[teleporter(width / 2, height / 2, 'shelterEntrance.png',
+                                                  [-1, 10, 10], destinationXandY=[width / 2, height * 3 / 4]),
+                                       ]),
+
+                     room([-1, 10, 10], 'ship', locks=False, usuallyLocks=False,
+                          teleporters=[teleporter(width / 2, height / 2, 'shelterEntrance.png',
+                                                  [-1, 5, 10],
+                                                  destinationXandY=[width / 2, height * 3 / 4])],
+                          constantDamage=0.1,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)]),
+
+                     room([-1, 11, 10], 'ship', constantDamage=0.1, locks=False, usuallyLocks=False,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          foes=[foe('brokenTurret', width * i / 8, height / 4,
+                                    [-1, 11, 10], hp=float('inf')) for i in [1, 7]] + \
+                               [foe('flamingRobot', width * i / 4, height / 4,
+                                    [-1, 11, 10], hp=float('inf')) for i in [1, 3]] + \
+                               [foe('robotBodyguard', width / 2, height / 2, [-1, 11, 10],
+                                    hp=float('inf'), cooldownPerRoomSwitch=150, empowered=True)]),
+
+                     room([-1, 12, 10], 'ship', constantDamage=0.1, locks=False, usuallyLocks=False,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          foes=[foe('brokenTurret', width / 2, height / 2, [-1, 12, 10],
+                                      hp=float('inf'), empowered=True)]),
+
+                     room([0, 12, 10], 'ship', constantDamage=0.1, locks=False, usuallyLocks=False,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          enemyBullets=[bullet(random.randint(1, 3), random.randint(1, 3), 26,
+                                               'bouncySplittingProjectileFromWatchdog.png', width / 2,
+                                               height / 2, linger=float('inf'), piercing=float('inf'), bounces=True,
+                                               dissappearsAtEdges=False,
+                                               timeBeforeStop=float('inf')) for i in range(5)],
+                          resetsBulletsOnRespawn=True,
+                          foes = [foe('desertCaveSmallFly', width / 5, height / 2, [0, 12, 10],
+                                      deathEffect='proRoom().locks = True; rooms.rooms[(-1, 13, 10)].damagingTraps = '
+                                                  'rooms.rooms[(-1, 13, 10)].specialRects = {}',
+                                      spawnsOnDefeat=[foe('temporaryBrokenTurret', width / 5, height / 2,
+                                                          [0, 12, 10], duration=5000,
+                                                          deathEffect='proRoom().locks = False; pro.heal(80)'),
+                                                      foe('flamingRobot', width / 10, height / 2,
+                                                          [0, 12, 10], spawnDelay=3000, empowered=True,
+                                                          hp=float('inf'))])]),
+
+                     room([-1, 13, 10], 'ship', constantDamage=0.1, locks=False, usuallyLocks=False,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          damagingTraps=[damagingTrap('aFire.png', 200, width * i / 40,
+                                                      height * j / 30) for i in range(1, 40) for j in range(1, 25)],
+                          resetsDamagingTrapsOnRespawn=True,
+                          specialRects={rect(pygame.Rect(0, 0, width, height * 3 / 4)): 'pro.hp = 0'}),
+
+                     room([-2, 12, 10], 'ship', constantDamage=0.1, locks=False, usuallyLocks=False,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          foes=random.choices([foe('desertCaveSpittingGrub',
+                                                   width * i / 40, height * j / 30, [-2, 12, 10],
+                                                   hp=float('inf')) for i in range(1, 30) for j in range(1, 30)],
+                                              k=300),
+                          resetsDamagingTrapsOnRespawn=True,
+                          specialRects={rect(pygame.Rect(0, 0, width * 3 / 4, height)): 'pro.hp = 0'}),
+
+                     room([-1, 14, 10], 'ship', constantDamage=0.1, locks=False, usuallyLocks=False,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          foes=[foe('brokenTurret', width / 2, height / 2, [-1, 14, 10],
+                                    angle=math.pi * (h / 16 + 1), directionOfRotation=(-1) ** h,
+                                    empowered=True) for h in range(4)] + \
+                          [foe('flamingRobot', width * 7/ 8, height * i / 3, [-1, 14, 10],
+                               hp=float('inf')) for i in [1, 3]] + \
+                          [foe('flamingRobot', width / 8, height / 2, [-1, 14, 10], hp=float('inf'),
+                               cooldownPerRoomSwitch=175)]),
+
+                    # The following room's code is a mess. Trust that it works.
+                     room([0, 14, 10], 'ship', constantDamage=0.1, locks=False, usuallyLocks=False,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          foes=[foe('desertCaveSmallFly', width / 5, height / 2, [0, 14, 10],
+                                    locksRoomOnAggression=True,
+                                    deathEffect='rooms.rooms[(-2, 12, 10)].damagingTraps=[damagingTrap("aFire.png",200,'
+                                                ' width * i / 40, '
+                                                'height * j / 30) for i in range(1, 30) for j in range(1, 30)]; '
+                                                'rooms.rooms[(-2, 12, 10)].foes = []; '
+                                                'rooms.rooms[(-1, 11, 10)].foes +='
+                                                ' [foe("desertCaveSmallFly", width / 2, height / 2, [-1, 11, 10], '
+                                                'deathEffect="rooms.rooms[(-2, 12, 10)].damagingTraps='
+                                                'rooms.rooms[(-2, 12, 10)].specialRects = {}; '
+                                                'proRoom().locks=True", '
+                                                'spawnsOnDefeat=[foe("desertCaveExplosiveFoe", width / 2, height / 2, '
+                                                '[-1, 11, 10], hp=float("inf"), duration=1000, '
+                                                'deathEffect = "pro.heal(80); '
+                                                'pro.getPotion(); proRoom().locks = False")])]',
+                                    spawnsOnDefeat=[foe('desertCaveExplosiveFoe', width * i / 16,
+                                                        height * 7 / 32,
+                                                        [0, 14, 10], hp=float('inf'),
+                                                        duration=350, spawnDelay=100 * i,
+                                                        fireDuration=200) for i in range(1, 16)] + \
+                                                   [foe('desertCaveExplosiveFoe', width * 15 / 16,
+                                                        height * (i / 8 + 3 / 32),
+                                                        [0, 14, 10], hp=float('inf'), duration=200,
+                                                        spawnDelay=100 * (i + 16),
+                                                        fireDuration=200) for i in range(1, 8)] + \
+                                                   [foe('desertCaveExplosiveFoe',
+                                                        width * (16 - i) / 16, height * 31 / 32,
+                                                        [0, 14, 10], hp=float('inf'), duration=200,
+                                                        spawnDelay=100 * (i + 23),
+                                                        fireDuration=200) for i in range(1, 16)] + \
+                                                   [foe('desertCaveExplosiveFoe', width / 16,
+                                                        height * (35 / 4 - i) / 8,
+                                                        [0, 14, 10], hp=float('inf'), duration=200,
+                                                        spawnDelay=100 * (i + 39),
+                                                        fireDuration=200) for i in range(1, 8)] + \
+                                                   [foe('desertCaveExplosiveFoe', width / 16, height * 7 / 32,
+                                                        [0, 14, 10], hp=float('inf'), duration=200,
+                                                        deathEffect='pro.heal(80); proRoom().locks = False',
+                                                        spawnDelay=4600, fireDuration=200)])]),
+
+                     room([-3, 12, 10], 'ship', constantDamage=0.1,
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          foes=[foe('desertCaveSummoner', width / 2, height / 2, [-3, 12, 10],
+                                    empowered=True, hp=float('inf')),
+                                foe('desertCaveExplosiveFoe', width / 2, height / 8, [-3, 12, 10],
+                                    hp=float('inf'), duration=20000, deathEffect = "pro.destroyFoes()")]),
+
+                     room([-4, 12, 10], 'ship',
+                          plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                          foes=[foe('desertCaveSmallFly', width / 2, height / 2, [-4, 12, 10],
+                                    deathEffect='rooms.rooms[(1, 0, 10)].teleporters.append('
+                                                'teleporter(width / 32, height * 7 / 32, '
+                                                '"shelterEntrance.png", [-4, 12, 10], '
+                                                'destinationXandY=[width / 2, height / 2])); '
+                                                'proRoom().foesUponRespawn = []')]),
+
+                     room([-4, 11, 10], 'ship',
+                     plainSprites=[plainSprite('nightFilter.png', width / 2, height / 2)],
+                     foes=[
+                         foe('hellhound', width / 2, height / 2, [-4, 11, 10],
+                             dependentFoes=[foe('tougherShipMiniboss', width / 2, height / 4,
+                                                [-4, 11, 10])])],
+                          damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
+                                                      height * 856 / 900) for i in range(32)] + [
+                                            damagingTrap('aFire.png', 26, width * 31 / 1600,
+                                                         (height - yBoundaryShip) * i / 14 + yBoundaryShip) for i in
+                                            range(1, 14)
+                                        ] + [damagingTrap('aFire.png', 26, width * 1569 / 1600,
+                                                          (height - yBoundaryShip) * i / 14 + yBoundaryShip) for i in
+                                             range(1, 14)]
+                                        + [damagingTrap('aFire.png', 26, width * i / 31,
+                                                        height * 44 / 900 + yBoundaryShip) for i in range(1, 13)
+                                           ] + [
+                                            damagingTrap('aFire.png', 26, width * i / 31,
+                                                         height * 44 / 900 + yBoundaryShip) for i in range(19, 31)
+                                        ], isBossRoom=True)
+                     ]
 
         for place in shipRooms:
             self.rooms[tuple(place.coordinate)] = place
