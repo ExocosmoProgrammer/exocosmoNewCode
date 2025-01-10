@@ -1,6 +1,6 @@
 from textBox import textBox
 from variables import width, fullscreenRect, height
-from definitions import lesser, drawToFullScreen
+from definitions import lesser, drawToFullScreen, getEvents, temporarilyPlay
 
 import pygame
 import datetime
@@ -22,7 +22,7 @@ class intermissionScreen:
                                    lineSpacing=height / 20)
         self.top = top
 
-    def play(self):
+    def play(self, initialMusic=None):
         """Shows self and plays music."""
 
         # Play music.
@@ -37,7 +37,7 @@ class intermissionScreen:
             # Determine how many characters to draw based on self's duration.
             timePassedTimedelta = datetime.datetime.now() - startTime
             timePassedInSeconds = timePassedTimedelta.total_seconds()
-            charactersShownQTY = int(lesser(timePassedInSeconds * 4, self.length))
+            charactersShownQTY = int(lesser(timePassedInSeconds * 16, self.length))
             print(charactersShownQTY)
 
             # Store a text box to draw.
@@ -54,11 +54,9 @@ class intermissionScreen:
 
             pygame.display.flip()
 
-            # If the screen is all shown and the player presses 'y', have the intermission screen end.
-            if charactersShownQTY == self.length:
-                for event in pygame.event.get(pygame.KEYDOWN):
-                    if event.key == pygame.K_y:
-                        return
+            # Exit if the intermission screen is finished and the player pressed the y key.
+            if getEvents({pygame.KEYDOWN: [pygame.K_y]}) and charactersShownQTY == self.length:
+                if initialMusic is not None:
+                    temporarilyPlay(initialMusic)
 
-            # Get rid of events.
-            pygame.event.pump()
+                return
