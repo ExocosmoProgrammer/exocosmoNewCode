@@ -8,4 +8,6 @@ class droppedItem:
         self.sprite = sprite
         self.place = IMAGES[self.sprite].get_rect(center=(centerx, centery))
         self.hitbox = rect(self.place)
+
+        # self.item is what the player should get for colliding with self.
         self.item = whatYouGetForPickingUpTheItem
