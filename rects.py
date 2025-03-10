@@ -90,12 +90,12 @@ class rect:
 
             self.lines.append(line(slope, constant, boundaries))
 
-    def showCollision(self, rectangle):
+    def showCollision(self, rectangle, length=2):
         for i in self.points:
-            display.fill((255, 255, 255), pygame.Rect(i[0] - 5, i[1] - 5, 10, 10))
+            display.fill((255, 255, 255), pygame.Rect(i[0] - length / 2, i[1] - length / 2, length, length))
 
         for i in rectangle.points:
-            display.fill((100, 100, 100), pygame.Rect(i[0] - 5, i[1] - 5, 10, 10))
+            display.fill((100, 100, 100), pygame.Rect(i[0] - length / 2, i[1] - length / 2, length, length))
 
     def checkCollision(self, rectangle=None):
         self.updatePoints()
