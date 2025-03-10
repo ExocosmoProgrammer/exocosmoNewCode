@@ -1,16 +1,19 @@
 from word import word
 from definitions import draw
 from variables import IMAGES, height, width
+from rects import rect
+
 import pygame
 
 
 class textBox:
-    def __init__(self, text, font, boxSprite, left, top, maximumWidth):
+    def __init__(self, text, font, boxSprite, left, top, maximumWidth, lineSpacing=height / 45):
         """textBox(text, font, boxSprite, left, top, maximumWidth).draw() draws a text box with sprite boxSprite,
         leftmost point at left, topmost point at top, and width maximumWidth and that contains text text in
         font font."""
         self.sprite = boxSprite
         self.words = []
+        self.text = text
         text = text.upper()
         wordsLeft = text.split()
         currentRight = left + maximumWidth * 2 / 33
@@ -28,14 +31,15 @@ class textBox:
 
             else:
                 currentRight = left + maximumWidth * 2 / 33
-                currentY += height / 45
+                currentY += lineSpacing
 
         self.height = currentY + height / 21 - top
         self.width = maximumWidth
         self.place = pygame.Rect(left, top, maximumWidth, self.height)
+        self.hitbox = rect(self.place)
 
-    def draw(self):
-        draw(self, scaling=(self.width, self.height))
+    def draw(self, offset=(0, 0)):
+        draw(self, scaling=(self.width, self.height), offset=offset)
 
         for i in self.words:
-            i.draw()
+            i.draw(offset=offset)
