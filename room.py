@@ -78,6 +78,7 @@ class room:
 
                     case -1:
                         self.calmSong = 'desertCaveCalm.mp3'
+                        self.locks = False
                         self.combatSong = 'desertCaveCombatLayer1.mp3'
 
                         if coordinate == [0, 6, -1]:
@@ -139,7 +140,6 @@ class room:
                 self.calmSong = self.combatSong = 'Crashed.mp3'
                 self.constantDamage = 0.1
                 self.resetsDamagingTrapsOnRespawn = True
-                self.playerXRangeToGoUp = self.playerXRangeToGoDown = [width * 55 / 112, width * 61 / 112]
 
             case 'desertCaveForest':
                 self.difficulty = -2
@@ -153,18 +153,26 @@ class room:
                 self.addsResources = False
                 self.calmSong = self.combatSong = 'lumisForest.mp3'
 
+                # Add trees.
                 for i in range(70):
                     try:
+                        # Get a random tree sprite.
                         treeSprite = random.choice([f'desertCaveLumisTree{i}' for i in ['', 'B', 'C', 'D', 'E', 'F',
                                                                                             'G', 'H']])
+
+                        # Choose a place where the tree can fit.
                         pyRect = IMAGES[f'{treeSprite}.png'].get_rect()
+
                         rectangle = environmentObject(treeSprite, 0, 0).hitbox
                         coord = self.getLocationInCell(pyRect, hitbox=rectangle)
+
+                        # Add the tree.
                         self.environmentObjects.append(environmentObject(treeSprite, coord[0], coord[1]))
 
                     except (IndexError, KeyError):
                         pass
 
+                # Add ferns.
                 for i in range(70):
                     try:
                         coord = self.getLocationInCell(IMAGES['desertCaveLumisFern.png'].get_rect())
@@ -173,6 +181,7 @@ class room:
                     except (KeyError, IndexError):
                         pass
 
+                # Add critters.
                 for i in range(random.randint(0, 5)):
                     critter = random.choice(['desertCaveSlug', 'desertCaveButterfly', 'desertCaveAmphipod',
                                              'desertCaveCritterWithThreeLegs'])
@@ -203,6 +212,38 @@ class room:
                         self.background = 'desertCaveLumisLakeSurfaceRoom.bmp'
                         self.disconnected = True
                         self.calmSong = self.combatSong = 'desertCaveLumisLakeAboveWater.mp3'
+
+            case 'desertCaveFlowerBiome':
+                self.standardRoomMaxDifficulty = 10
+                self.foeDifficulties = {'desertCaveLargeFly': (5, 50), 'desertCaveSmallFly': (1, 100)}
+                self.maxResources = random.choice([1, 1, 1, 1, 2, 2, 2, 3])
+                self.background = 'desertCaveTopLayerNew.bmp'
+                self.yBoundaries = height * 125 / 900
+                self.addsResources = True
+                self.calmSong = self.combatSong = 'desertCaveCalm.mp3'
+                self.locks = self.usuallyLocks = False
+
+                # Add flowers.
+                for i in range(random.choice([0, 0, 1, 1, 2])):
+                    try:
+                        newTreeType = f'desertCaveFlowerBiomeTree{random.randint(1, 2)}'
+                        newTree = environmentObject(newTreeType, 0, 0)
+                        pyRect = IMAGES[newTree.sprite].get_rect()
+                        rectangle = newTree.hitbox
+                        coord = self.getLocationInCell(pyRect, hitbox=rectangle)
+                        self.environmentObjects.append(environmentObject(newTreeType, coord[0], coord[1]))
+
+                    except (IndexError, KeyError):
+                        pass
+
+                for i in range(random.choice([2, 3, 3, 4, 4, 4, 5, 5, 6])):
+                    try:
+                        flowerSprite = f'desertCaveFlower{random.randint(1, 3)}.png'
+                        coord = self.getLocationInCell(IMAGES[flowerSprite].get_rect())
+                        self.plainSprites.append(plainSprite(flowerSprite, coord[0], coord[1]))
+
+                    except KeyError:
+                        pass
 
         try:
             self.action = roomActions[(self.biome, self.coordinate[2])]
@@ -289,40 +330,72 @@ class room:
     def getEnvironmentObjectsOnRespawn(self):
         self.environmentObjectsUponRespawn = [copy.deepcopy(envObject) for envObject in self.environmentObjects]
 
-    def addFoes(self, difficulty):
-        self.difficulty = difficulty
-        self.cleared = 0
+    def addFoes(self):
+        # Adds foes based on self.difficulty.
 
-        if difficulty == 5:
-            self.mapMarker = 'difficultyFiveMapImage.png'
-
-        if difficulty > -1:
+        if self.difficulty > -1:
             if self.biome == 'desert' and self.coordinate[2] == -1:
-                self.foes = [foe('desertCaveJellyfish',
-                                 random.randint(int(self.leftXBoundary), int(self.rightXBoundary)),
-                                 random.randint(int(self.yBoundaries), height),
-                                 self.coordinate) for i in range(5)]
+                if self.difficulty == 5:
+                    minX = int(width / 10)
+                    maxX = int(width * 9 / 10)
+                    minY = int(height / 4)
+                    maxY = int(height * 9 / 10)
+                    spiders = [foe('desertCaveSpider', random.randint(minX, maxX), random.randint(minY, maxY),
+                                  self.coordinate, aggressionRadius=float('inf'), empowered=True) for i in range(2)]
+                    smallFlies = [foe('desertCaveSmallFly', random.randint(minX, maxX),
+                                      random.randint(minY, maxY), self.coordinate, unusualTargets=spiders,
+                                      aggressionRadius=float('inf')) for i in range(5)]
+                    largeFlies = [foe('desertCaveLargeFly', random.randint(minX, maxX),
+                                      random.randint(minY, maxY), self.coordinate, unusualTargets=spiders,
+                                      aggressionRadius=float('inf')) for i in range(5)]
 
-                if difficulty >= 1:
-                    self.foes += [foe('desertCaveLargeFly', random.randint(int(width / 10), int(width * 9 / 10)),
-                                      random.randint(int(height / 5), int(height * 9 / 10)), self.coordinate) for
-                                  i in range(math.ceil((difficulty + 1) / 2))]
+                    for spider in spiders:
+                        spider.unusualTargets = smallFlies + largeFlies
+                        spider.unusualTarget = random.choice(spider.unusualTargets)
 
-                if difficulty >= 3:
-                    self.foes += [foe('desertCaveMoth', random.randint(int(width / 10), int(width * 9 / 10)),
-                                      random.randint(int(height / 5), int(height * 9 / 10)), self.coordinate)]
+                    self.foes = spiders + smallFlies + largeFlies
 
-                if difficulty >= 4:
-                    self.foes += [foe('desertCaveSpider',
-                                      random.randint(int(self.leftXBoundary), int(self.rightXBoundary)),
-                                      random.randint(int(self.yBoundaries), height),
-                                      self.coordinate)]
+                else:
+                    self.foes = [foe('desertCaveJellyfish',
+                                     random.randint(int(self.leftXBoundary), int(self.rightXBoundary)),
+                                     random.randint(int(self.yBoundaries), height),
+                                     self.coordinate) for i in range(5)]
+
+                    if self.difficulty >= 1:
+                        self.foes += [foe('desertCaveLargeFly', random.randint(int(width / 10), int(width * 9 / 10)),
+                                          random.randint(int(height / 5), int(height * 9 / 10)), self.coordinate) for
+                                      i in range(math.ceil((self.difficulty + 1) / 2))]
+
+                    if self.difficulty >= 3:
+                        self.foes += [foe('desertCaveMoth', random.randint(int(width / 10), int(width * 9 / 10)),
+                                          random.randint(int(height / 5), int(height * 9 / 10)), self.coordinate)]
+
+                    if self.difficulty >= 4:
+                        self.foes += [foe('desertCaveSpider',
+                                          random.randint(int(self.leftXBoundary), int(self.rightXBoundary)),
+                                          random.randint(int(self.yBoundaries), height),
+                                          self.coordinate)]
 
         for enemy in self.foes:
             enemy.yBoundary = getYBoundary(enemy, self.yBoundaries)
             enemy.bottomYBoundary = self.bottomYBoundary
             enemy.leftXBoundary = self.leftXBoundary
             enemy.rightXBoundary = self.rightXBoundary
+            
+    def becomeCombatRoom(self, difficulty):
+        # Turns self into a combat room.
+
+        self.difficulty = difficulty
+        self.cleared = 0
+
+        # Rooms with difficulty 5 are treated specially.
+        if difficulty == 5:
+            self.mapMarker = 'difficultyFiveMapImage.png'
+            self.locks = self.usuallyLocks = True
+            self.respawnsFoes = True
+            
+        self.addFoes()
+        self.getFoesUponRespawn()
 
     def spawnFoesFromRoomSwitch(self):
         currentCumulativeDifficulty = 0
