@@ -38,9 +38,7 @@ class world:
                                        i in range(10)]),
 
                      room([0, -1, 10], 'ship', foes=[
-                         foe('hellhound', width / 2, height / 2, [0, -1, 10],
-                             dependentFoes=[foe('tougherShipMiniboss', width / 2, height / 4,
-                                                [0, -1, 10])])],
+                         foe('shipMiniboss', width / 2, height / 2, [0, -1, 10])],
                           damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
                                                       height * 856 / 900) for i in range(32)] + [
                                             damagingTrap('aFire.png', 26, width * 31 / 1600,
@@ -260,17 +258,17 @@ class world:
 
                      room([-4, 11, 10], 'gauntlet', locks=True, usuallyLocks=True, constantDamage=0,
                           background='arenaForWatchdogAndHellhound.bmp',
-                          specialRects={rect(pygame.Rect(width / 6, 0, 1, height)):
+                          specialRects={rect(pygame.Rect(width / 4, 0, 1, height)):
                                         'proRoom().foes[0].spawnDelay = 0; runGame(); '
                                         'proRoom().foes[1].spawnDelay = 0; '
                                         'proRoom().foes[1].delaySprite = proRoom().foes[0].delaySprite = '
-                                        '"watchdogFirePillar1.png"'},
+                                        '"hellhoundFootstep.png"; proRoom().specialRects = {}'},
                      foes=[
-                         foe('hellhound', width / 11, height / 2, [-4, 11, 10],
-                             dependentFoes=[foe('tougherShipMiniboss', width / 2, height / 4,
-                                                [-4, 11, 10], spawnDelay=float('inf'),
-                                                delaySprite='invisiblePixels.png')],
-                             spawnDelay=float('inf'), delaySprite = 'hellhoundIdle1.png')],
+                         foe('tougherShipMiniboss', width / 11, height / 2,
+                             [-4, 11, 10], spawnDelay=float('inf'),
+                             delaySprite='watchdogIdle1.png',
+                             dependentFoes=[foe('hellhound', width / 2, height / 4, [-4, 11, 10],
+                                                spawnDelay=float('inf'), delaySprite = 'invisiblePixels.png')])],
                           damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
                                                       height * 856 / 900) for i in range(32)] + [
                                             damagingTrap('aFire.png', 26, width * 31 / 1600,
@@ -308,34 +306,12 @@ class world:
         return 0
 
     def addTopDesertCaveLayerSpecialRooms(self, biome):
-        yCoords = [member.coordinate[1] for member in biome]
-        choices = [member for member in biome if member.coordinate[1] == max(yCoords)]
-        chosenRoom = random.choice(choices)
-        newRoomCoord = (chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 1, chosenRoom.coordinate[2])
-        self.unavailableCoords += [(chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 2, chosenRoom.coordinate[2]),
-                                   (chosenRoom.coordinate[0] - 1, chosenRoom.coordinate[1] + 1,
-                                    chosenRoom.coordinate[2]),
-                                   (chosenRoom.coordinate[0] + 2, chosenRoom.coordinate[1] + 1,
-                                    chosenRoom.coordinate[2])]
-        ledgeDestinationCoord = (chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 1, -2)
-        teleporterHitbox = rect(pygame.Rect(0, 0, width, height * 763 / 1024))
-        self.rooms[newRoomCoord] = room(newRoomCoord, 'desert', background='ledgeToDesertCaveDepthTwo.bmp',
-                                        teleporters=[teleporter(0, 0, 'invisiblePixels.png',
-                                                                list(ledgeDestinationCoord),
-                                                                [width / 2, height * 38 / 39],
-                                                                hitbox=teleporterHitbox)],
-                                        yBoundaries=height * 357 / 512, difficulty=4,
-                                        foes=[foe('desertCaveLargeFly', width * i / 7, height / 4,
-                                                  newRoomCoord) for i in range(1, 7)])
-        biome.append(self.rooms[newRoomCoord])
-        self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert', locks=False)
-        self.desertCaveDepthTwoEntranceCoord = ledgeDestinationCoord
         roomWithMiniboss = random.choice([place for place in biome if place.difficulty == -1])
         roomWithMiniboss.foes = [foe('desertCaveFlyMiniboss', width / 2,
                                                                     height / 2, roomWithMiniboss.coordinate)]
         roomWithMiniboss.getFoesUponRespawn()
-        roomWithMiniboss.usesFoesUponRespawn = True
-        roomWithMiniboss.difficulty = 0
+        roomWithMiniboss.difficulty = 5
+        roomWithMiniboss.mapMarker = 'difficultyFiveMapImage.png'
         roomWithMiniboss.respawnsFoes = True
         roomWithMiniboss.isBossRoom = True
         roomWithMiniboss.environmentObjects = []
@@ -401,8 +377,7 @@ class world:
                                                                   'destinationXandY=[width / 2, height * 4 / 5])); ')
         self.rooms[middleLumisLakeCoord].getFoesUponRespawn()
         self.rooms[middleLumisLakeCoord].getEnvironmentObjectsOnRespawn()
-
-
+        self.rooms[middleLumisLakeCoord].oxygenLoss = 0
         counter = 0
 
         for place in biome:
@@ -413,15 +388,68 @@ class world:
                 biome.append(self.rooms[newRoomCoord])
                 huntingSpider = foe('desertCaveSpider', width / 4, height / 4, place.coordinate.copy())
                 huntedFoeType = random.choice(['desertCaveLargeFly', 'desertCaveMoth'])
-                huntedFoe = foe(huntedFoeType, width / 2, height / 2, place.coordinate.copy())
+                huntedFoe = foe(huntedFoeType, width / 2, height / 2, place.coordinate.copy(),
+                                unusualTarget=huntingSpider)
                 huntingSpider.unusualTarget = huntedFoe
-                huntedFoe.unusualTarget = huntingSpider
+                huntingSpider.unusualTargets = [huntedFoe]
                 huntedFoe.aggressionRadius = float('inf')
                 self.rooms[newRoomCoord].foes = [huntingSpider, huntedFoe]
                 counter += 1
 
                 if counter == 5:
                     break
+
+        # Add flower biomes.
+        for i in range(3):
+            # addFlowerBiome will be set to True if there is space for a flower biome.
+            addFlowerBiome = False
+
+            # Determine where to put the flower biome.
+            for place in [place for place in biome if place.difficulty <= -1]:
+                if self.areThereEnoughRoomsConnectedToTheInitialRoom(place, 8):
+                    initialFlowerBiomeRoom = place.coordinate
+                    addFlowerBiome = True
+                    break
+
+            # Add the flower biome if possible.
+            if addFlowerBiome:
+                self.rooms[tuple(initialFlowerBiomeRoom)] = room(initialFlowerBiomeRoom, 'desertCaveFlowerBiome')
+                biome += self.makeRooms(5, 'desertCaveFlowerBiome', initialFlowerBiomeRoom, {})
+                flowerBiome = [self.rooms[tuple(initialFlowerBiomeRoom)]] + biome[-5:]
+
+                # Add a spider to the first flower biome.
+                if i == 0:
+                    roomWithSpider = random.choice(flowerBiome)
+                    spider = foe('desertCaveSpider', width / 2, height / 2, roomWithSpider.coordinate.copy(),
+                                 unusualTargets=roomWithSpider.foes.copy())
+                    roomWithSpider.foes.append(spider)
+
+            # Oterwise, give up on adding flower biomes.
+            else:
+                break
+
+        yCoords = [member.coordinate[1] for member in biome]
+        choices = [member for member in biome if member.coordinate[1] == max(yCoords)]
+        chosenRoom = random.choice(choices)
+        newRoomCoord = (chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 1, chosenRoom.coordinate[2])
+        self.unavailableCoords += [(chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 2, chosenRoom.coordinate[2]),
+                                   (chosenRoom.coordinate[0] - 1, chosenRoom.coordinate[1] + 1,
+                                    chosenRoom.coordinate[2]),
+                                   (chosenRoom.coordinate[0] + 2, chosenRoom.coordinate[1] + 1,
+                                    chosenRoom.coordinate[2])]
+        ledgeDestinationCoord = (chosenRoom.coordinate[0], chosenRoom.coordinate[1] + 1, -2)
+        teleporterHitbox = rect(pygame.Rect(0, 0, width, height * 763 / 1024))
+        self.rooms[newRoomCoord] = room(newRoomCoord, 'desert', background='ledgeToDesertCaveDepthTwo.bmp',
+                                        teleporters=[teleporter(0, 0, 'invisiblePixels.png',
+                                                                list(ledgeDestinationCoord),
+                                                                [width / 2, height * 38 / 39],
+                                                                hitbox=teleporterHitbox)],
+                                        yBoundaries=height * 357 / 512, difficulty=4,
+                                        foes=[foe('desertCaveLargeFly', width * i / 7, height / 4,
+                                                  newRoomCoord) for i in range(1, 7)])
+        biome.append(self.rooms[newRoomCoord])
+        self.rooms[ledgeDestinationCoord] = room(ledgeDestinationCoord, 'desert', locks=False)
+        self.desertCaveDepthTwoEntranceCoord = ledgeDestinationCoord
 
     def addMiddleDesertCaveLayerSpecialRooms(self, biome):
         yCoords = [member.coordinate[1] for member in biome]
@@ -499,7 +527,7 @@ class world:
             for i in range(difficultyQtys[key]):
                 if key > -1:
                     combatRoom = random.choice(calmRooms)
-                    combatRoom.addFoes(key)
+                    combatRoom.becomeCombatRoom(key)
                     calmRooms.remove(combatRoom)
 
                     if key == 5:
