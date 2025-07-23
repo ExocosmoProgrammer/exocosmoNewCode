@@ -33,9 +33,12 @@ class environmentObject:
             case 'desertCaveLargeFlower':
                 self.sprite = 'desertCaveLargeFlower.png'
                 self.hp = float('inf')
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
                 self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
                                          item('lumis flower', 'desertCaveLittleFlower.png',
                                               qty=random.randint(5, 10)))
+                self.hitbox = rect(pygame.Rect(self.place.left, self.place.top + self.place.height * 39 / 49,
+                                               self.place.width, self.place.height * 10 / 49))
     
             case 'desertCaveLumisTree':
                 self.sprite = 'desertCaveLumisTree.png'
@@ -101,6 +104,14 @@ class environmentObject:
 
             case 'lumisLakeRock1':
                 self.sprite = 'lumisLakeRockType1.png'
+                self.hp = float('inf')
+
+            case 'desertCaveFlowerBiomeTree1':
+                self.sprite = 'desertCaveFlowerBiomeTree1.png'
+                self.hp = float('inf')
+
+            case 'desertCaveFlowerBiomeTree2':
+                self.sprite = 'desertCaveFlowerBiomeTree2.png'
                 self.hp = float('inf')
 
         # self.place will most likely already be defined if self.hitbox should have different points than self.place.
