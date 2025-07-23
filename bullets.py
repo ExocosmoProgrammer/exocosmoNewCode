@@ -3,7 +3,9 @@ import time
 
 from variables import IMAGES, GAMESPEED, MOVESPEED, width, height, display
 from rects import rect
-from definitions import getDegrees, sqrt, getRadians, pointDistance, blitWithOffset, sec
+
+# Please keep the sec, getPath, sqrt, and debuff import statements. Contrary to what Pycharm says, I need them.
+from definitions import getDegrees, sqrt, getRadians, pointDistance, blitWithOffset, sec, getPath
 from debuff import debuff
 
 import math
@@ -30,6 +32,9 @@ class bullet:
         self.stun = stun
         self.rotationByDuration = rotationByDuration
         self.target = target
+
+        # Self may use self.relatedBullets to get or modify data on other related bullets.
+        self.relatedBullets = []
 
         # self.additionalMethods should be a dict where each key n will be called with arguments
         # *self.additionalMethods[n]
@@ -115,13 +120,13 @@ class bullet:
             self.hitbox = rect(place, self.rotation * math.pi / 180)
 
         else:
-            self.hitbox = hitboxOnProjectile
+            self.hitbox = copy.deepcopy(hitboxOnProjectile)
 
             # TODO Make this block account for if rotation is not None.
             self.hitbox.rotate(getRadians(self.hr, self.vr))
             self.hitbox.move(self.x, self.y)
 
-        self.hitboxOnProjectilePerAnimationFrame = hitboxOnProjectilePerAnimationFrame
+        self.hitboxOnProjectilePerAnimationFrame = copy.deepcopy(hitboxOnProjectilePerAnimationFrame)
 
         if self.hitboxOnProjectilePerAnimationFrame is not None:
             self.hitbox = copy.deepcopy(self.hitboxOnProjectilePerAnimationFrame[0])
@@ -254,9 +259,9 @@ class bullet:
         # Move self.hitbox.
         self.hitbox.move(self.x - oldX, self.y - oldY)
 
+
     def visuallyConnectToFirer(self, sprite, offset=(0, 0)):
-        """Draws sprite to connect self to self.firer. May only be used if self.firer is specified instead of
-        defaulting to 1."""
+        """Draws sprite to connect self to self.firer. May only be used if self.firer is specified."""
 
         # Scale sprite to the right size.
         distanceToFirer = pointDistance((self.x, self.y), (self.firer.x, self.firer.y))
