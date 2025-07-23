@@ -95,7 +95,6 @@ class player:
         self.maxPotions = 2
         self.potions = 2
         self.potionRechargeProgress = 0
-        self.canRechargePotion = True
         self.hpBar = plainSprite("hpBar.png", width * 33 / 400, height / 50)
         self.hpGoneSprite = plainSprite('hpGone.png', width * 33 / 400, height / 50)
         self.staminaBar = plainSprite("staminaBar.png", width * 33 / 400, height * 13 / 180)
@@ -195,7 +194,7 @@ class player:
             self.updateHpRect()
 
         if playHurtSound:
-            playSoundEffect('hurt.wav')
+            playSoundEffect('hurt.wav', volume=0.4)
 
 
     def heal(self, hp):
@@ -242,7 +241,7 @@ class player:
             self.slideTime = 40
             self.stamina -= 300
             self.invincibility = 60
-            playSoundEffect('dashing2.wav', volume=0.6)
+            playSoundEffect('dashing2.wav', volume=0.4)
 
     def usePotion(self):
         """Makes the player use a potion."""
@@ -251,7 +250,6 @@ class player:
             self.potions -= 1
             self.hp = lesser(self.hp + 70, self.maxHp)
             self.potionRechargeProgress = 0
-            self.canRechargePotion = True
             self.updateHpRect()
             playSoundEffect('healing.wav')
             self.healingCooldown = 240
