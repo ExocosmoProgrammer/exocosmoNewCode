@@ -31,11 +31,11 @@ displayVars.screenOffset = [0, 0]
 # Create some intermission screens.
 introductoryIntermission = intermissionScreen('Your ship has crashed. You look around and notice that your ship is on '
                                               'fire and that its machines are malfunctioning and attacking '
-                                              'you.', 'shipBackgroundWithDoor.bmp', 'My Song 116.mp3')
+                                              'you.', 'shipBackgroundWithDoor.bmp', 'intermission1.mp3')
 shipClearedIntermission = intermissionScreen('You destroyed your ship\'s malfunctioning robots that attacked you. '
                                              'The fires in your ship have gone out. Your ship, unfortunately, no '
                                              'longer functions as a ship.', 'shipBackgroundWithDoor.bmp',
-                                             'My Song 116.mp3')
+                                             'intermission1.mp3')
 
 # Do other stuff.
 
@@ -59,7 +59,7 @@ def play(song, saveSong=True, volume=0.15):
 enemyBullets = []
 positionInSong = 0
 pro = player()
-play('littleFugue.mp3')
+play('valseHommageMp3.mp3')
 startButton = button('whiteStartButton.png', width * 41 / 50, height * 7 / 12,
                      spriteWhenTouchingMouse='redStartButton.png')
 exitButton = button('whiteExitButton.png', width * 41 / 50, height * 17 / 24,
@@ -205,7 +205,7 @@ def drawGame():
         draw(pro, offset=displayVars.screenOffset)
 
         for enemy in currentRoom.foes:
-            #enemy.hitbox.showCollision(pro.hitbox)
+            enemy.hitbox.showCollision(pro.hitbox)
 
             if enemy.spawnDelay <= 0:
                 if enemy.rotated:
@@ -231,8 +231,8 @@ def drawGame():
                 blitWithOffset(IMAGES[enemy.delaySprite], enemy.place, displayVars.screenOffset)
 
         for projectile in pro.bullets + enemyBullets + [i for i in proRoom().enemyBullets if i.linger > 0]:
-            #if projectile.linger > 0 and projectile.delay <= 0:
-            #   projectile.hitbox.showCollision(pro.hitbox, length=10)
+            if projectile.linger > 0 and projectile.delay <= 0:
+               projectile.hitbox.showCollision(pro.hitbox, length=10)
 
             if projectile.delay <= 0:
                 draw(projectile, projectile.rotation, offset=displayVars.screenOffset)
@@ -312,15 +312,27 @@ def foeActions():
                     rooms.rooms[tuple(enemy.room)].foes.append(enemy)
 
             else:
-                # Make enemy to attack pro if the enemy's target was not pro and is dead.
+                # Make enemy to attack pro if the enemy no longer has unusual targets.
                 if enemy.unusualTarget is not None and enemy.unusualTarget.hp <= 0:
-                    enemy.unusualTarget = None
+                    if enemy.unusualTargets:
+                        newTarget = random.choice(enemy.unusualTargets)
+                        enemy.unusualTarget = newTarget
+
+                    else:
+                        enemy.unusualTarget = None
 
                 enemy.actAsFoe(pro, rooms, currentRoom, displayVars)
                 enemyBullets += enemy.newBullets
-                currentRoom.foes += enemy.newFoes
-                enemy.newFoes = []
                 enemy.newBullets = []
+
+
+    # Every enemy must update unusual targets before any enemy can have its newFoes reset.
+    for enemy in proRoom().foes:
+        enemy.updateUnusualTargets()
+
+    for enemy in proRoom().foes:
+        currentRoom.foes += enemy.newFoes
+        enemy.newFoes = []
 
 
 def passiveCritterActions():
@@ -441,8 +453,11 @@ def checkCollisionWithFoe(projectile, foe):
     if eval(projectile.checksCollisionWhen) and foe.spawnDelay <= 0 and foe.hp > 0 and \
             projectile.hitbox.checkCollision(foe.hitbox):
         if foe.shieldedBy not in currentRoom.foes:
-            foe.hp -= projectile.damage if projectile.firer == pro else projectile.damage / 140
-            currentRoom.damageMarkers.append(damageMarker(projectile.damage, projectile.x, projectile.y))
+            # Calculate the damage inflicted
+            damage = projectile.damage if projectile.firer == pro else projectile.damage / 140
+            damage *= (100 - foe.percentDR) / 100
+            foe.hp -= damage
+            currentRoom.damageMarkers.append(damageMarker(damage, projectile.x, projectile.y))
             exec(projectile.foeContactEffect)
             foe.stun = greater(foe.stun, projectile.stun)
 
@@ -453,12 +468,11 @@ def checkCollisionWithFoe(projectile, foe):
             if projectile.knockback is not None:
                 foe.movementModifiers.append(projectile.knockback)
 
-            if pro.canRechargePotion and projectile.firer == pro:
+            if projectile.firer == pro:
                 pro.potionRechargeProgress += projectile.damage
 
-                if pro.potionRechargeProgress >= 40:
-                    pro.potionRechargeProgress = 40
-                    pro.canRechargePotion = False
+                if pro.potionRechargeProgress >= 40 and pro.potions < pro.maxPotions:
+                    pro.potionRechargeProgress = 0
                     pro.getPotion()
 
         projectile.piercing -= 1
@@ -541,47 +555,54 @@ def removeFoes():
 
     for enemy in currentRoom.foes:
         if enemy.hp <= 0:
-            for debuff in enemy.debuffs:
-                exec(debuff.effectUponEnding)
+            if enemy.temporaryRevivalDuration is None:
+                for debuff in enemy.debuffs:
+                    exec(debuff.effectUponEnding)
 
-            while enemy in currentRoom.foes:
-                currentRoom.foes.remove(enemy)
+                while enemy in currentRoom.foes:
+                    currentRoom.foes.remove(enemy)
 
-            while enemy in pro.aggressiveFoes:
-                pro.aggressiveFoes.remove(enemy)
+                while enemy in pro.aggressiveFoes:
+                    pro.aggressiveFoes.remove(enemy)
 
-            if enemy.deathAnimation is not None:
-                currentRoom.temporaryAnimations.append(temporaryAnimation(enemy.deathAnimation, enemy.x, enemy.y))
+                if enemy.deathAnimation is not None:
+                    currentRoom.temporaryAnimations.append(temporaryAnimation(enemy.deathAnimation, enemy.x, enemy.y))
 
-            if enemy.spawnsOnDefeat is not None:
+                if enemy.spawnsOnDefeat is not None:
 
-                for otherEnemy in enemy.spawnsOnDefeat:
-                    otherEnemy.spawnDelay = otherEnemy.spawnDelay if otherEnemy.spawnDelay else 1000
-                    otherEnemy.yBoundary = enemy.yBoundary
+                    for otherEnemy in enemy.spawnsOnDefeat:
+                        otherEnemy.spawnDelay = otherEnemy.spawnDelay if otherEnemy.spawnDelay else 1000
+                        otherEnemy.yBoundary = enemy.yBoundary
 
-                currentRoom.foes += enemy.spawnsOnDefeat
+                    currentRoom.foes += enemy.spawnsOnDefeat
 
-            for thing in enemy.loot:
-                if percentChance(thing[1]):
-                    currentRoom.droppedItems.append(droppedItem(enemy.x, enemy.y, thing[0].sprite, thing[0].item))
+                for thing in enemy.loot:
+                    if percentChance(thing[1]):
+                        currentRoom.droppedItems.append(droppedItem(enemy.x, enemy.y, thing[0].sprite, thing[0].item))
 
-            if enemy.specialSong is not None:
-                playSpecialSong = False
+                if enemy.specialSong is not None:
+                    playSpecialSong = False
 
-                for enemy in proRoom().foes:
-                    if enemy.specialSong is not None:
-                        play(enemy.specialSong)
-                        playSpecialSong = True
-                        break
+                    for enemy in proRoom().foes:
+                        if enemy.specialSong is not None:
+                            play(enemy.specialSong, volume=0.15 * enemy.specialSongVolumeMultiplier)
+                            playSpecialSong = True
+                            break
 
-                if not playSpecialSong:
-                    play(proRoom().combatSong if proRoom().foes else proRoom().calmSong)
+                    if not playSpecialSong:
+                        play(proRoom().combatSong if proRoom().foes else proRoom().calmSong)
 
-            exec(enemy.deathEffect)
+                exec(enemy.deathEffect)
 
-            if not currentRoom.foes:
-                roomClearingProcedure()
+                if not currentRoom.foes:
+                    roomClearingProcedure()
 
+            else:
+                # Revive enemy temporarily.
+                enemy.duration = enemy.temporaryRevivalDuration
+                enemy.temporaryRevivalDuration = None
+                enemy.percentDR = 100
+                enemy.hp = 1
 
 def roomClearingProcedure():
     """roomClearingProcedure() should add more enemies to the player's room or heal the player as is wanted."""
@@ -622,7 +643,7 @@ def roomClearingProcedure():
         play(proRoom().calmSong)
         save()
 
-    if currentRoom.isBossRoom and not currentRoom.foes:
+    if (currentRoom.isBossRoom or currentRoom.difficulty == 5) and not currentRoom.foes:
         currentRoom.respawnsFoes = False
 
 
@@ -688,7 +709,7 @@ def roomSwitchingProcedure():
 
     for enemy in currentRoom.foes:
         if enemy.specialSong is not None:
-            play(enemy.specialSong)
+            play(enemy.specialSong, volume=0.15 * enemy.specialSongVolumeMultiplier)
             break
 
     save()
