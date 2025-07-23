@@ -6,7 +6,7 @@ import math
 
 from bullets import bullet
 from definitions import getPath, sqrt, getRadians, pointDistance, lesser, greater, \
-    getPartiallyRandomPath, skip, plusOrMinus, fillWithOffset, playSoundEffect, sec, getDegrees
+    getPartiallyRandomPath, skip, plusOrMinus, fillWithOffset, playSoundEffect, sec, getDegrees, percentChance
 from temporaryAnimation import temporaryAnimation
 from variables import IMAGES, GAMESPEED, MOVESPEED, width, height, display, diagonal
 from rects import rect
@@ -22,7 +22,8 @@ watchdogTeleportAnimation = [f'watchdogTeleport{i}.png' for i in range(1, 13) fo
 
 
 class foe:
-    def __init__(self, name, centerx, centery, room, dependentFoes=None, unusualTarget=None, **extra):
+    def __init__(self, name, centerx, centery, room, dependentFoes=None, unusualTarget=None, unusualTargets=None,
+                 **extra):
         if dependentFoes is None:
             dependentFoes = []
 
@@ -59,6 +60,14 @@ class foe:
         self.speed = 1
         self.debuffs = []
         self.idleSoundCooldown = 0
+
+        # Self.percentDR is the percent damage reduction that self has.
+        self.percentDR = 0
+
+        # If self.temporaryRevivalDuration is not None, then self will revive temporarily upon dying.
+        # If self has a temporary revival, then self.duration should be able to get reduced or else self will never
+        # die.
+        self.temporaryRevivalDuration = None
 
         # self.deathEffect will be executed when self dies.
         self.deathEffect = 'pass'
@@ -109,6 +118,7 @@ class foe:
         self.stun = 0
         self.isAggressive = False
         self.flippedHorizontally = False
+        self.specialSongVolumeMultiplier = 1
 
         # self.empowered can be set to true when self is created.
         self.empowered = False
@@ -118,8 +128,14 @@ class foe:
         # third element is the duration.
         self.movementModifiers = []
 
-        # If self.unusualTarget is None, self will attack pro. Otherwise, self will attack self.unusualTarget.
+        # If self.unusualTarget is None, then self will attack pro. Otherwise, self will attack self.unusualTarget.
         self.unusualTarget = unusualTarget
+        self.unusualTargets = [] if unusualTarget is unusualTargets is None \
+            else ([unusualTarget] if unusualTargets is None else unusualTargets)
+
+        # If unusual targets are specified but a specific target is not, then a random target will be chosen
+        if self.unusualTargets and self.unusualTarget is None:
+            self.unusualTarget = random.choice(self.unusualTargets)
 
         # self.specialSong determines what, if any, any special song should play when self is around.
         self.specialSong = None
@@ -295,7 +311,7 @@ class foe:
                 self.specialSong = 'motherFly.mp3'
     
             case 'tougherShipMiniboss':
-                self.hp = 500
+                self.hp = 300
                 self.sprite = 'watchdogIdle1.png'
                 self.animation = [f'watchdogIdle{i}.png' for i in [1, 2] for j in range(30)]
                 self.damage = 26
@@ -312,6 +328,8 @@ class foe:
                 self.laser2Angle = 0
                 self.enraged = False
                 self.thirdFireCooldown = 0
+                self.specialSong = 'chopinPolonaiseInF#Minor.mp3'
+                self.specialSongVolumeMultiplier = 5
                 widthOfFireball = IMAGES['watchdogFireball.png'].get_width()
                 heightOfFireball = IMAGES['watchdogFireball.png'].get_height()
                 widthOfBigFireball = IMAGES['watchdogLargeFireball.png'].get_width()
@@ -374,13 +392,13 @@ class foe:
                 self.hp = float('inf')
                 self.damage = 80
                 self.sprite = 'gauntletMiniboss1.png'
-                self.duration = 20000
+                self.duration = 10000
                 self.deathEffect = 'pro.destroyFoes()'
                 self.animation = [f'gauntletMiniboss{i}.png' for i in [1, 2] for j in range(25)]
                 self.deathAnimation = [f'gauntletMinibossDeath{i}.png' for i in range(1, 8) for j in range(150)]
-                self.fireCooldown = 500
-                self.altFireCooldown = 1000
-                self.thirdFireCooldown = 1500
+                self.fireCooldown = 250
+                self.altFireCooldown = 500
+                self.thirdFireCooldown = 750
                 self.aggressionRadius = float('inf')
 
             case 'gauntletKamikaze':
@@ -393,7 +411,7 @@ class foe:
                 self.aggressionRadius = float('inf')
     
             case 'hellhound':
-                self.hp = 1250
+                self.hp = 400
                 self.sprite = 'hellhoundIdle1.png'
                 self.animation = [f'hellhoundIdle{i}.png' for i in [1, 2] for j in range(50)]
                 self.mode = 'standard'
@@ -410,6 +428,8 @@ class foe:
                 self.hitboxOnSlashes = rect(pygame.Rect(-60 * widthMultiplier, -58 * heightMultiplier,
                                                         92 * widthMultiplier, 99 * heightMultiplier))
                 self.aggressionRadius = float('inf')
+                self.specialSong = 'chopinPolonaiseInF#Minor.mp3'
+                self.specialSongVolumeMultiplier = 5
 
             case 'scary':
                 self.delayAnimation = [f'scaryDelayAnimation{i}.png' for i in range(1, 36) for j in range(22)]
@@ -432,10 +452,11 @@ class foe:
                 self.acted = False
 
             case 'container':
-                self.hp = 200
+                self.hp = 500
                 self.fireCooldown = 0
                 self.altFireCooldown = float('inf')
                 self.thirdFireCooldown = 0
+                self.fourthFireCooldown = 0
                 self.sprite = 'container1.png'
                 self.damage = 80
                 self.laserAngle = 0
@@ -445,6 +466,13 @@ class foe:
                 self.animation = [f'container{i}.png' for i in [1, 2] for j in range(20)]
                 self.showsHp = True
                 self.specialSong = 'The source.mp3'
+                self.temporaryRevivalDuration = 40000
+                self.executedRevivalProcedure = False
+                self.firedFinalLaser = False
+                widthMultiplier = width / 1600
+                heightMultiplier = height / 900
+                self.specialProjectileHitbox = rect(pygame.Rect(-21 * widthMultiplier, -42 * heightMultiplier,
+                                                                19 * heightMultiplier, 19 * widthMultiplier))
 
             case 'lumisBlobFromContainer':
                 self.hp = 5
@@ -457,13 +485,11 @@ class foe:
                 self.momentum = 1
                 self.isAggressive = True
                 self.animation = [f'desertCaveFlyMinibossLargeProjectile{i}.png'for i in range(1, 6) for j in range(10)]
-
-                # TODO consider making the projectiles that self spawns on defeat bounce off of walls.
                 bulletQty = random.randint(3, 5)
                 self.deathEffect = (f'enemyBullets += [bullet(2 * math.cos(2 * i * math.pi / {bulletQty}), '
-                                    f'2 * math.sin(2 * i * math.pi / {bulletQty}), 50, "spiderProjectile1.png", '
+                                    f'2 * math.sin(2 * i * math.pi / {bulletQty}), 50, "basicContainerProjectile.png", '
                                     f'enemy.x, enemy.y) for i in range({bulletQty})]; ')
-                self.deathEffect += ('enemy.fireInFloweryPattern1(50, "flamingRobotFireTrail.png", 0.012, 600); '
+                self.deathEffect += ('enemy.fireInFloweryPattern1(50, "basicContainerProjectile.png", 0.012, 600); '
                                     'enemyBullets += enemy.newBullets')
                 self.duration = random.randint(1000, 2000)
 
@@ -499,6 +525,17 @@ class foe:
 
         # Ensure that self remains centered on the right point.
         self.place = IMAGES[self.sprite].get_rect(center=(self.x, self.y))
+
+    def updateUnusualTargets(self):
+        """Add and remove targets from self.unusualTargets as needed."""
+
+        for enemy in self.unusualTargets:
+            for summon in enemy.newFoes:
+                print(summon)
+                self.unusualTargets.append(summon)
+
+            if enemy.hp <= 0:
+                self.unusualTargets.remove(enemy)
 
     def actAsBrokenTurret(self, target, *args):
         # Rotate self.
@@ -814,17 +851,17 @@ class foe:
             # If there is space for an assistant, create one where there is space.
             if self.summonsAsDesertCaveLargeFly['top'] is None or self.summonsAsDesertCaveLargeFly['top'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room,
-                                        unusualTarget=self.unusualTarget, vr=-0.3))
+                                        unusualTargets=self.unusualTargets, vr=-0.3))
                 self.summonsAsDesertCaveLargeFly['top'] = self.newFoes[-1]
 
             elif self.summonsAsDesertCaveLargeFly['left'] is None or self.summonsAsDesertCaveLargeFly['left'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room,
-                                        unusualTarget=self.unusualTarget, hr=-0.3))
+                                        unusualTargets=self.unusualTargets, hr=-0.3))
                 self.summonsAsDesertCaveLargeFly['left'] = self.newFoes[-1]
 
             elif self.summonsAsDesertCaveLargeFly['right'] is None or self.summonsAsDesertCaveLargeFly['right'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room,
-                                        unusualTarget=self.unusualTarget, hr=0.3))
+                                        unusualTargets=self.unusualTargets, hr=0.3))
                 self.summonsAsDesertCaveLargeFly['right'] = self.newFoes[-1]
 
             self.summons = [value for value in self.summonsAsDesertCaveLargeFly.values() if value is not None and \
@@ -847,7 +884,7 @@ class foe:
 
         # If self.fireCooldown <= 0, fire towards the target and set self.fireCooldown.
         if self.fireCooldown <= 0:
-            self.basicStraightShot(4, 'brokenTurretFireball.png', 3 if type(target) is foe else 60,
+            self.basicStraightShot(4, 'brokenTurretFireball.png', 30,
                                    target, unusualTargets=[self.unusualTarget])
             self.fireCooldown = 200
 
@@ -895,11 +932,52 @@ class foe:
                     self.hitbox = copy.deepcopy(self.hitboxOnSelf)
                     self.hitbox.move(self.x, self.y)
 
-        # If self.fireCooldown <= 0, fire a cluster of projectiles and set self.fireCooldown.
+        # If self.fireCooldown <= 0, then fire a cluster of projectiles and set self.fireCooldown.
         if self.fireCooldown <= 0:
             self.basicClusterShot(3, 30, target, 4, 'desertCaveMothProjectile1.png',
                                  50, unusualTargets=[self.unusualTarget],
                                  animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] for j in range(15)])
+            self.fireCooldown = random.randint(30, 600)
+
+        # If self.altFireCooldown <= 0, enact the proper procedure.
+        elif self.altFireCooldown <= 0:
+            # Set self.movement code so that self will move in a semicircular motion.
+            self.setMovementInSemicircleTowardsTarget(target, width / 20)
+
+            # Set self.altFireCooldown.
+            self.altFireCooldown = 600
+
+    def desertCaveMothExperiment(self, target, room):
+        # Reduce cooldowns.
+        self.fireCooldown -= GAMESPEED
+        self.altFireCooldown -= GAMESPEED
+
+        # Progress self.animation.
+        self.progressAnimation()
+
+        # Once self should move, move self.
+        exec(self.movementCode)
+
+        # Update self.t. self.t will be used to calculate self.x and self.y.
+        self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
+
+        # Make self turn around if it hits an object.
+        for thing in room.environmentObjects:
+            if thing.hitbox.checkCollision(self.hitbox):
+                self.deltaTSign *= -1
+                self.setMovementInSemicircleTowardsTarget(target, width / 20)
+
+                while thing.hitbox.checkCollision(self.hitbox):
+                    self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
+                    exec(self.movementCode)
+                    self.hitbox = copy.deepcopy(self.hitboxOnSelf)
+                    self.hitbox.move(self.x, self.y)
+
+        # If self.fireCooldown <= 0, fire a cluster of projectiles and set self.fireCooldown.
+        if self.fireCooldown <= 0:
+            self.basicClusterShot(3, 30, target, 4, 'desertCaveMothProjectile1.png',
+                                  50, unusualTargets=[self.unusualTarget],
+                                  animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] for j in range(15)])
             self.fireCooldown = random.randint(30, 600)
 
         # If self.altFireCooldown <= 0, enact the proper procedure.
@@ -956,11 +1034,11 @@ class foe:
 
         # If self.fireCooldown <= 0, set self's movement to be headed near the player, and set self's cooldowns.
         if self.fireCooldown <= 0:
-            self.setMovementNearTarget(target, 2.5, 30)
+            self.setMovementNearTarget(target, 3 if self.empowered else 2.5, 30)
 
             # self.fireCooldown will be infinite until self.altFireCooldown <= 0.
             self.fireCooldown = float('inf')
-            self.altFireCooldown = random.randint(25, 175)
+            self.altFireCooldown = random.randint(20, 140) if self.empowered else random.randint(25, 175)
 
         # If self.altFireCooldown <= 0, stop self's movement, set self's cooldowns, and fire a group of projectiles
         # headed near the player.
@@ -969,14 +1047,13 @@ class foe:
             self.vr = 0
 
             # self.unusualTarget may be a large fly.
-            self.basicSpreadShot(3, math.pi / 6, target, 3, 'spiderProjectile1.png', 60, 
+            self.basicSpreadShot(3, math.pi / 6, target, 4 if self.empowered else 3,'spiderProjectile1.png', 60,
                                  animation=[f'spiderProjectile{i}.png' for i in [1, 2] for j in range(30)],
-                                 unusualTargets=[self.unusualTarget] + list(self.unusualTarget.summons if \
-                                                                                self.unusualTarget is not None else []))
+                                 unusualTargets=self.unusualTargets)
 
             # self.altFireCooldown will be infinite until self.fireCooldown <= 0.
             self.altFireCooldown = float('inf')
-            self.fireCooldown = random.randint(15, 150)
+            self.fireCooldown = random.randint(5, 100) if self.empowered else random.randint(15, 150)
 
     def actAsDesertCaveFlyMiniboss(self, target, *args):
         """This function should be used by the desert cave fly miniboss on each of its turns."""
@@ -1186,6 +1263,14 @@ class foe:
                     f'hitboxOnProjectile=copy.deepcopy(projectile.hitboxForFragments)))'
         self.newBullets.append(bullet(path[0], path[1], damage, sprite, self.x, self.y, endEffect=endEffect, bounces=1,
                                       dissappearsAtEdges=0, hitboxForFragments=hitboxForFragments, **kwargs))
+
+    def giveProjectileSpiralingSplitEffect1(self, projectile, speed, size, damage, sprite, qty):
+        "Make a projectile split into projectiles following a scaled and moved version of the graph "
+
+        projectile.endEffect = (f"for i in range({qty}): enemyBullets.append(bullet(0, 0, {damage}, '{sprite}', "
+                                 f"projectile.x, projectile.y, theta=i * 2 * math.pi / {qty}, "
+                                 f"polarMovement='[{speed * size}, {speed}]', rotation=0, "
+                                f"dissappearsAtEdges=False))")
 
     def setMovementToTarget(self, target, speed):
         """Sets self's hr and vr so that self.moveNormally causes self to move straight towards the target's
@@ -1454,8 +1539,9 @@ class foe:
 
             if self.mode == 'standard':
                 self.modeDuration = 2400
+                newModeNumber = random.randint(0, 6)
 
-                match random.choice([1, 6]):
+                match newModeNumber:
                     case 0:
                         self.mode = 'turretSummoning'
     
@@ -1610,7 +1696,7 @@ class foe:
 
     def createRingOfSpiralingBullets(self, speed, radiusToTheta, qty, damage, sprite, x=None,
                                      y=None, **kwargs):
-        """"""
+        """Fire projectiles that follow a spiral."""
 
         # By default, the projectiles should be created at self's location.
         if x is None:
@@ -1773,7 +1859,7 @@ class foe:
                                     angle=getRadians(target.x - self.x, self.y - target.y), spawnDelay=150))
             self.newFoes[-1].hp = float('inf') if self.empowered else self.newFoes[-1].hp
 
-            self.fireCooldown = 1500
+            self.fireCooldown = 750
 
         # If self.altFireCooldown <= 0, fire a group of projectiles aimed near to the player,
         # and set self.altFireCooldown.
@@ -1782,7 +1868,7 @@ class foe:
                                  'gauntletMinibossHomingProjectile1.png', 45,
                                  animation=[f'gauntletMinibossHomingProjectile{i}.png' \
                                             for i in range(1, 6) for j in range(30)])
-            self.altFireCooldown = 1500
+            self.altFireCooldown = 750
 
             for i in range(1, 8):
                 self.giveProjectileHoming(self.newBullets[-i], diagonal / 10)
@@ -1790,7 +1876,7 @@ class foe:
         # If self.thirdFireCooldown <= 0, teleport to a random location, and set self.thirdFireCooldown.
         elif self.thirdFireCooldown <= 0:
             self.teleportRandomly(100)
-            self.thirdFireCooldown = 1500
+            self.thirdFireCooldown = 750
 
     def actAsGauntletKamikaze(self, target, *args):
         """This function should be used by gauntlet kamikaze on each turn of theirs."""
@@ -1913,7 +1999,7 @@ class foe:
                     # If self.fireCooldown <= 0, fire a still projectile and set self.fireCooldown.
                     if self.fireCooldown <= 0:
                         self.newBullets.append(bullet(0, 0, 26, 'hellhoundFootstep.png', self.x,
-                                                      self.y))
+                                                      self.y, linger=500))
 
                         self.fireCooldown = 50
 
@@ -1921,7 +2007,7 @@ class foe:
                     if self.fireCooldown <= 0:
                         # Fire a still projectile and set self.fireCooldown.
                         self.newBullets.append(bullet(0, 0, 26, 'hellhoundFootstep.png', self.x,
-                                                      self.y))
+                                                      self.y, linger=500))
                         self.fireCooldown = 40
 
                     if self.altFireCooldown <= 0:
@@ -2631,6 +2717,21 @@ class foe:
                                       theta=angleToTarget, polarMovement=polarMovement, dissappearsAtEdges=False,
                                       **kwargs))
 
+    def oscillatingAttack1Var(self, damage, sprite, speed, target, size, angleVaiationDegrees, **kwargs):
+        """Fires projectiles following scaled, moved, and rotated versions of the
+                graphs of theta=sin(r) and theta=-sin(r)"""
+
+        angleToTarget = getRadians(target.x - self.x, self.y - target.y) + \
+                        random.randint(-angleVaiationDegrees, angleVaiationDegrees) * math.pi / 180
+        polarMovement = f'[{speed * size}, {speed} * math.cos({speed} * self.currentDuration)]'
+        self.newBullets.append(bullet(0, 0, damage, sprite, self.x, self.y, piercing=float('inf'),
+                                      theta=angleToTarget, polarMovement=polarMovement, dissappearsAtEdges=False,
+                                      **kwargs))
+        polarMovement = f'[{speed * size}, {-speed} * math.cos({speed} * self.currentDuration)]'
+        self.newBullets.append(bullet(0, 0, damage, sprite, self.x, self.y, piercing=float('inf'),
+                                      theta=angleToTarget, polarMovement=polarMovement, dissappearsAtEdges=False,
+                                      **kwargs))
+
     def oscillatingAttack2(self, damage, sprite, speed, target, variation, oscillationRate, **kwargs):
         """Fires oscillating projectiles that chase the player."""
 
@@ -2653,99 +2754,378 @@ class foe:
                                                             f"math.sin({oscillationRate} * self.currentDuration))]",
                                       piercing=float('inf'), **kwargs))
 
-    def actAsContainer(self, target, *args):
-        """Act as the container."""
+    def oscillatingAttack3(self, damage, sprite, movementRate, rotationRate, target, size, qty, **kwargs):
+        """Fire projectiles that rotate around a center that moves towards target."""
 
+        basicMovement = getPath(movementRate, [self.x, self.y], [target.x, target.y])
+
+        for i in range(qty):
+            initAngle = 2 * i * math.pi / qty
+            self.newBullets.append(bullet(0, 0, damage, sprite, self.x + size * math.cos(initAngle),
+                                          self.y + size * math.sin(initAngle),
+                                          durationBasedMovement=f'[{basicMovement[0]} - {size * rotationRate} * '
+                                                                f'math.sin({rotationRate} * self.currentDuration + '
+                                                                f'{initAngle}), '
+                                                                f'{basicMovement[1]} + {size * rotationRate} * '
+                                                                f'math.cos({rotationRate} * self.currentDuration + '
+                                                                f'{initAngle})]', piercing=float('inf'),
+                                         dissappearsAtEdges=False, **kwargs))
+
+    def oscillatingAttack4(self, damage, sprite, movementRate, rotationRate, angle, size, qty, **kwargs):
+        """Fire projectiles that rotate around a center that moves at a given angle."""
+
+        basicMovement = [movementRate * math.cos(angle), movementRate * math.sin(angle)]
+
+        for i in range(qty):
+            initAngle = 2 * i * math.pi / qty
+            self.newBullets.append(bullet(0, 0, damage, sprite, self.x + size * math.cos(initAngle),
+                                          self.y + size * math.sin(initAngle),
+                                          durationBasedMovement=f'[{basicMovement[0]} - {size * rotationRate} * '
+                                                                f'math.sin({rotationRate} * self.currentDuration + '
+                                                                f'{initAngle}), '
+                                                                f'{basicMovement[1]} + {size * rotationRate} * '
+                                                                f'math.cos({rotationRate} * self.currentDuration + '
+                                                                f'{initAngle})]', piercing=float('inf'),
+                                          dissappearsAtEdges=False, **kwargs))
+
+    def oscillatingAttack5(self, damage, sprite, movementRate, rotationRate, target, size, qty, **kwargs):
+        """Fire projectiles that rotate around a center that always moves towards target."""
+
+        for i in range(qty):
+            initAngle = 2 * i * math.pi / qty
+            self.newBullets.append(bullet(0, 0, damage, sprite, self.x + size * math.cos(initAngle),
+                                          self.y + size * math.sin(initAngle), target=target,
+                                          durationBasedMovement=f'[getPath({movementRate}, [self.x - '
+                                                                f'{size} * math.cos({initAngle} + {rotationRate} * '
+                                                                f'self.currentDuration), '
+                                                                f'self.y - {size} * math.sin({initAngle} + '
+                                                                f'{rotationRate} * self.currentDuration)], '
+                                                                f'[self.target.x, self.target.y])[0] - '
+                                                                f'{size * rotationRate} * '
+                                                                f'math.sin({rotationRate} * self.currentDuration + '
+                                                                f'{initAngle}), '
+                                                                f'getPath({movementRate}, '
+                                                                f'[self.x - {size} * math.cos({initAngle} + '
+                                                                f'{rotationRate} * self.currentDuration), '
+                                                                f'self.y - {size} * math.sin({initAngle} + '
+                                                                f'{rotationRate} * self.currentDuration)], '
+                                                                f'[self.target.x, self.target.y])[1] + '
+                                                                f'{size * rotationRate} * '
+                                                                f'math.cos({rotationRate} * self.currentDuration + '
+                                                                f'{initAngle})]',
+                                          dissappearsAtEdges=False, piercing=float('inf'), **kwargs))
+
+    def oscillatingAttack6(self, damage, sprite, speed, target, size, **kwargs):
+        """Fires projectiles following scaled, moved, and rotated versions of the
+                graphs of theta=sin(r)/r and theta=-sin(r)/r"""
+
+        angleToTarget = getRadians(target.x - self.x, self.y - target.y)
+        polarMovement = (f'[{speed * size}, {speed} * (math.cos({speed} * self.currentDuration) + '
+                         f'2 * math.cos({2 * speed} * self.currentDuration))]')
+        self.newBullets.append(bullet(0, 0, damage, sprite, self.x, self.y, piercing=float('inf'),
+                                      theta=angleToTarget, polarMovement=polarMovement, dissappearsAtEdges=False,
+                                      **kwargs))
+        polarMovement = (f'[{speed * size}, {-speed} * (math.cos({speed} * self.currentDuration) + '
+                         f'2 * math.cos({2 * speed} * self.currentDuration))]')
+        self.newBullets.append(bullet(0, 0, damage, sprite, self.x, self.y, piercing=float('inf'),
+                                      theta=angleToTarget, polarMovement=polarMovement, dissappearsAtEdges=False,
+                                      **kwargs))
+
+    def actAsContainerNormally(self, target, *args):
+        """Act as the container before reviving."""
+
+        # Reduce cooldowns.
         self.fireCooldown -= GAMESPEED
         self.altFireCooldown -= GAMESPEED
         self.thirdFireCooldown -= GAMESPEED
+
+        # Progress self's animation.
         self.progressAnimation()
 
+        # Perform regular attacks based on self.mode.
         match self.mode:
             case 'laser':
                 self.durationOfLaser += GAMESPEED
 
+                # Rotate self's laser if needed.
                 if 1900 > self.durationOfLaser > 100:
+                    # Determine which way to rotate to reach the player quicker.
                     self.laserAngle %= 2 * math.pi
                     angleToPlayer = getRadians(target.x - self.x, target.y - self.y) % (2 * math.pi)
                     negativeAngle = (self.laserAngle - angleToPlayer) % (2 * math.pi)
                     positiveAngle = (angleToPlayer - self.laserAngle) % (2 * math.pi)
+
+                    # Determine the new angle for the laser.
                     self.laserAngle += (GAMESPEED / 750 if positiveAngle < negativeAngle else -GAMESPEED / 750) * \
-                                       self.durationOfLaser ** 0.1
+                                       (self.durationOfLaser - 100) ** (0.1 if self.hp > 250 else 0.15)
+
+                    # Fire a laser at the new angle.
                     animation = [f'containerLaser{i}.png' for i in range(18, 21) for j in range(266)]
                     self.fireLaserToAngle(self.laserAngle, animation[int(self.durationOfLaser) % 20], 80,
                                           linger=10)
 
+                # Attack regularly.
                 if self.thirdFireCooldown <= 0:
-                    self.fireInFloweryPattern2(50,
-                                         'flamingRobotFireTrail.png', 0.003, 3000)
                     self.thirdFireCooldown = 300
+                    self.fireInFloweryPattern2(50, 'basicContainerProjectile.png', 0.003,
+                                               3000)
                     playSoundEffect('containerProjectile1.wav', volume=0.6)
 
             case 'oscillatingAttack':
                 if self.thirdFireCooldown <= 0:
-                    self.createDamagingPath(self.oscillatingAttack1, 50, 0.12,
-                                            'flamingRobotFireTrail.png', 250, 225, 0,
-                                            'invisiblePixels.png', 0.06, target, 200)
+                    if self.hp > 250:
+                        self.createDamagingPath(self.oscillatingAttack1, 50, 0.12,
+                                                'basicContainerProjectile.png', 250, 225, 0,
+                                                'invisiblePixels.png', 0.06, target, 200)
+                        self.thirdFireCooldown = 400
+
+                    else:
+                        self.createDamagingPath(self.oscillatingAttack1, 50, 0.18,
+                                                'basicContainerProjectile.png', 250, 150, 0,
+                                                'invisiblePixels.png', 0.06, target, 200)
+                        self.thirdFireCooldown = 200
+
                     playSoundEffect('containerProjectile1.wav', volume=0.6)
-                    self.thirdFireCooldown = 400
 
+            case 'cycloids':
+                if self.thirdFireCooldown <= 0:
+                    color = random.choice(['Red', 'Blue', "Green", 'Pink', 'Purple', 'Yellow'])
+                    sprite = f'container{color}Projectile.png'
+                    hitbox = self.specialProjectileHitbox
+                    print(vars(self.specialProjectileHitbox))
+                    angle = getRadians(target.x - self.x, self.y - target.y) + \
+                            random.randint(-10, 10) * math.pi / 180
+                    self.oscillatingAttack4(50, sprite, 2,
+                                            random.randint(7, 13) / 1000, angle, random.randint(125, 175),
+                                            random.randint(3, 7), hitboxOnProjectile=hitbox)
+                    self.thirdFireCooldown = 400 if self.hp > 250 else 200
+
+        # Do something to start off the new mode if self.firecooldown <= 0. Eg. summon blobs.
         if self.fireCooldown <= 0:
+            # Set self.fireCooldown. self.fireCooldown will reach 0 again soon after self teleports.
             self.fireCooldown = float('inf')
-            angle = random.randint(0, 360) * math.pi / 180
-            self.newFoes.append(foe('lumisBlobFromContainer', self.x, self.y, self.room, angle=-angle,
-                                    hr=2 * math.cos(angle), vr=-2 * math.sin(angle),
-                                    duration=random.randint(375, 1500)))
-            playSoundEffect('containerProjectile1.wav', volume=0.6)
 
+            # Summon 1-2 blobs depending on self.hp. Play a sound effect.
+            for i in range(1 if self.hp > 125 else 2):
+                angle = random.randint(0, 360) * math.pi / 180
+                self.newFoes.append(foe('lumisBlobFromContainer', self.x, self.y, self.room, angle=-angle,
+                                        hr=2 * math.cos(angle), vr=-2 * math.sin(angle),
+                                        duration=random.randint(375, 1500)))
+                playSoundEffect('containerProjectile1.wav', volume=0.6)
+
+            # Attack.
             match self.mode:
                 case 'homingLumis':
+                    # Assign variables.
                     angleToPlayer = getRadians(target.x - self.x, target.y - self.y)
                     qty = random.randint(5, 6)
                     changeOfAngle = math.pi / 12
-                    self.altFireCooldown = 500
 
+                    # Set self.altFireCooldown depending on self.hp
+                    self.altFireCooldown = 500 if self.hp > 125 else 250
+
+                    # Launch lumis blobs at the player
                     for i in range(qty):
                         angle = angleToPlayer - (qty - 1) * changeOfAngle / 2 + i * changeOfAngle
                         self.newFoes.append(foe('lumisBlobFromContainer', self.x, self.y, self.room, angle=-angle,
                                                 hr=2 * math.cos(angle), vr=-2 * math.sin(angle),
                                                 duration=(i + 1) * random.randint(375, 750)))
 
+                case 'altHomingLumis':
+                    # Assign  variables
+                    angleToPlayer = getRadians(target.x - self.x, target.y - self.y)
+                    qty = random.randint(5, 6)
+                    changeOfAngle = math.pi / 12
+
+                    # Set self.altFireCooldown.
+                    self.altFireCooldown = 500 if self.hp > 125 else 250
+
+                    # Launch blobs at the player.
+                    for i in range(qty):
+                        angle = angleToPlayer - (qty - 1) * changeOfAngle / 2 + i * changeOfAngle
+                        self.newFoes.append(foe('lumisBlobFromContainer', self.x, self.y, self.room, angle=-angle,
+                                                hr=3 * math.cos(angle), vr=-3 * math.sin(angle),
+                                                duration=random.randint(250, 500)))
+
                 case 'laser':
+                    # Determine what angle to fire the laser to.
                     self.laserAngle = getRadians(target.x - self.x, target.y - self.y)
+
+                    # Set self.altFireCooldown.
                     self.altFireCooldown = 2000
-                    self.fireLaserWithWarning(self.laserAngle, 'containerLaser1.png', 65, 100,
-                                              10, 100, animation=[f'containerLaser{i}.png' for \
+
+                    # Fire a laser.
+                    self.fireLaserWithWarning(self.laserAngle, 'containerLaser1.png', 65,
+                                              100, 10, 100,
+                                              animation=[f'containerLaser{i}.png' for \
                                                                    i in range(1, 21) for j in range(40)])
+
+                    # Play a sound effect.
                     playSoundEffect('containerFullLaser.wav', volume=0.15)
+
+                    # Reset self.durationOfLaser to 0.
                     self.durationOfLaser = 0
 
                 case 'oscillatingAttack':
-                    self.oscillatingAttack2(50, 'flamingRobotFireTrail.png', 3, target,
+                    # Fire oscillating projectiles to attack the player.
+                    self.oscillatingAttack2(50, 'basicContainerProjectile.png', 3, target,
                                             1, 0.035, linger=1900)
+
+                    # Set self.altFireCooldown.
                     self.altFireCooldown = 2000
 
+                case 'cycloids':
+                    # Fire projectiles that rotate around a moving center, which chases the player.
+                    color = random.choice(['Red', 'Blue', "Green", 'Pink', 'Purple', 'Yellow'])
+                    sprite = f'container{color}Projectile.png'
+                    hitbox = self.specialProjectileHitbox
+                    self.oscillatingAttack5(50, sprite, 1,
+                                            random.randint(7, 13) / 1000, target, random.randint(125, 175),
+                                            random.randint(4, 6), linger=2900,
+                                            hitboxOnProjectile=hitbox)
+
+                    # Set cooldowns.
+                    self.altFireCooldown = 3000
+                    self.thirdFireCooldown = 200
+
+        # Teleport and choose a new mode if self.altFireCooldown <= 0.
         elif self.altFireCooldown <= 0:
+            # Set cooldowns.
             self.altFireCooldown = float('inf')
-            self.fireCooldown = 125
-            self.fireInFloweryPattern1(50, 'flamingRobotFireTrail.png', 0.003, 3000)
+            self.fireCooldown = 125 if self.hp > 125 else 50
+
+            # Fire a ring of projectiles.
+            self.fireInFloweryPattern1(50, 'basicContainerProjectile.png', 0.003, 3000)
+
+            # Teleport.
             self.teleportRandomly()
-            self.mode = random.choice(['oscillatingAttack', 'laser']) if self.mode == 'homingLumis' else \
-                random.choice(['oscillatingAttack', 'laser', 'homingLumis', 'homingLumis'])
+
+            # Choose a new mode. Available modes depend on self.hp and self.mode.
+            modes = ['oscillatingAttack', 'laser'] + ([] if self.hp > 375 else ['cycloids'])
+
+            if self.mode not in ['homingLumis', 'altHomingLumis']:
+                modes += ['homingLumis'] + ['homingLumis' if self.hp > 375 else 'altHomingLumis']
+
+            self.mode = random.choice(modes)
+            self.mode = 'cycloids'
+
+            # Play a sound effect.
             playSoundEffect('containerTeleport.wav', volume=0.225)
+
+    def actAsRevivedContainer(self, target, *args):
+        """Act as the container after reviving."""
+
+        self.fireCooldown -= GAMESPEED
+        self.altFireCooldown -= GAMESPEED
+        self.thirdFireCooldown -= GAMESPEED
+        self.fourthFireCooldown -= GAMESPEED
+
+        if not self.executedRevivalProcedure:
+            self.hp = 0
+            self.fireCooldown = 100
+            self.fourthFireCooldown = 1500
+            self.altFireCooldown = 2000
+            self.thirdFireCooldown = 3000
+            self.durationOfLaser = -float('inf')
+
+            # Play a sound effect.
+            playSoundEffect('containerFullLaser.wav', volume=0.15)
+
+            # Reset self.durationOfLaser to 0.
+            self.durationOfLaser = 0
+
+            # Set an attribute so that this procedure will only occur once.
+            self.executedRevivalProcedure = True
+
+        if self.fireCooldown <= 0:
+            self.teleportToPoint(width / 2, height / 2, spawnDelay=100)
+            self.fireCooldown = float('inf')
+
+        if self.altFireCooldown <= 0:
+            angle = random.randint(0, 360) * math.pi / 180
+            self.newFoes.append(foe('lumisBlobFromContainer', self.x, self.y, self.room, angle=-angle,
+                                    hr=2 * math.cos(angle), vr=-2 * math.sin(angle),
+                                    duration=random.randint(250, 500)))
+            playSoundEffect('containerProjectile1.wav', volume=0.6)
+            self.altFireCooldown = 333
+
+            if not self.firedFinalLaser:
+                self.durationOfLaser = 0
+                self.firedFinalLaser = True
+
+                # Fire a laser.
+                self.laserAngle = getRadians(target.x - self.x, target.y - self.y)
+                self.fireLaserWithWarning(self.laserAngle, 'containerLaser1.png', 0,
+                                          100, 100, 100,
+                                          animation=[f'containerLaser{i}.png' for \
+                                                     i in range(1, 21) for j in range(40)])
+
+        if self.thirdFireCooldown <= 0 and False:
+            self.fireInFloweryPattern2(50, 'flamingRobotFireTrail.png', 0.003, 3000)
+            playSoundEffect('containerProjectile1.wav', volume=0.6)
+            self.thirdFireCooldown = 1000
+
+        if self.fourthFireCooldown <= 0:
+            self.basicStraightShot(1, 'bouncySplittingProjectileFromWatchdog.png', 50, target,
+                                   bounces=True, linger=800)
+            self.giveProjectileHoming(self.newBullets[-1], diagonal / 4)
+            self.giveProjectileSpiralingSplitEffect1(self.newBullets[-1], 0.06, 200, 50,
+                                                     'flamingRobotFireTrail.png', 11)
+            playSoundEffect('containerProjectile1.wav', volume=0.6)
+            self.fourthFireCooldown = 700
+
+        if self.firedFinalLaser:
+            # Keep track of the duration of self's laser.
+            self.durationOfLaser += GAMESPEED
+
+            # Rotate self's laser.
+            if self.durationOfLaser > 100:
+                # Determine which way to rotate to reach the player quicker.
+                self.laserAngle %= 2 * math.pi
+                angleToPlayer = getRadians(target.x - self.x, target.y - self.y) % (2 * math.pi)
+                negativeAngle = (self.laserAngle - angleToPlayer) % (2 * math.pi)
+                positiveAngle = (angleToPlayer - self.laserAngle) % (2 * math.pi)
+
+                # Determine the new angle for the laser.
+                self.laserAngle += (GAMESPEED / 750 if positiveAngle < negativeAngle else -GAMESPEED / 750) * \
+                                   (self.durationOfLaser - 100) ** (0.15)
+
+                # Fire a laser at the new angle.
+                animation = [f'containerLaser{i}.png' for i in range(18, 21) for j in range(266)]
+                self.fireLaserToAngle(self.laserAngle, animation[int(self.durationOfLaser) % 20], 80,
+                                      linger=10)
+
+    def actAsContainer(self, target, *args):
+        """Act as the container"""
+
+        if self.temporaryRevivalDuration is None:
+            self.actAsRevivedContainer(target, *args)
+
+        else:
+            self.actAsContainerNormally(target, *args)
 
     def actAsLumisBlobFromContainer(self, target, *args):
         """Act as a blob of lumis from the container."""
 
+        # self.altFireCooldown will only be positive when self is being launched and will never be positive again.
         if self.altFireCooldown <= 0:
+            # Move like a jellyfish at self.angle.
             self.actAsDesertCaveJellyfish(target)
+
+            # Reduce the time until self automatically dies.
             self.reduceDuration()
+
+            # Randomly modify self.angle so that self does not go straight towards the player.
             self.angle += random.randint(-5, 5) * math.pi / 180
 
         else:
+            # Progress self's animation.
             self.progressAnimation()
+
+            # Reduce the delay until self acts normally.
             self.altFireCooldown -= GAMESPEED
 
+            # Move. Make self ready to act normally if self hits a wall.
             if self.moveNormally():
                 self.altFireCooldown = 0
 
