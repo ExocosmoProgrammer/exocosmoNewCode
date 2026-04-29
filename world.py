@@ -33,25 +33,31 @@ class world:
                          droppedItem(width / 2, height / 2, 'pistolInInventory.png',
                                      item('nanotechRevolver', 'pistolInInventory.png',
                                           description='Fires a nanotech bullet', stackSize=1))
-                     ], damagingTraps=[damagingTrap('fireTrap2.png', 26, width / 20
-                                                    * (1 + 2 * i), height * (2 / 3 - i * 13 / 900)) for
+                     ], damagingTraps=[damagingTrap('fireTrap2.png', 10, width / 20
+                                                    * (1 + 2 * i), height * (2 / 3 - i * 13 / 900),
+                                                    elementalDamages={'fire': 21}) for
                                        i in range(10)]),
 
                      room([0, -1, 10], 'ship', foes=[
                          foe('shipMiniboss', width / 2, height / 2, [0, -1, 10])],
-                          damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
-                                                      height * 856 / 900) for i in range(32)] + [
-                                            damagingTrap('aFire.png', 26, width * 31 / 1600,
-                                                         (height - yBoundaryShip) * i / 14 + yBoundaryShip) for i in
+                          damagingTraps=[damagingTrap('aFire.png', 10, width * i / 31,
+                                                      height * 856 / 900,
+                                                      elementalDamages={'fire': 21}) for i in range(32)] + [
+                                            damagingTrap('aFire.png', 10, width * 31 / 1600,
+                                                         (height - yBoundaryShip) * i / 14 + yBoundaryShip,
+                                                         elementalDamages={'fire': 21}) for i in
                                             range(1, 14)
-                                        ] + [damagingTrap('aFire.png', 26, width * 1569 / 1600,
-                                                          (height - yBoundaryShip) * i / 14 + yBoundaryShip) for i in
+                                        ] + [damagingTrap('aFire.png', 10, width * 1569 / 1600,
+                                                          (height - yBoundaryShip) * i / 14 + yBoundaryShip,
+                                                          elementalDamages={'fire': 21}) for i in
                                              range(1, 14)]
-                                        + [damagingTrap('aFire.png', 26, width * i / 31,
-                                                        height * 44 / 900 + yBoundaryShip) for i in range(1, 13)
+                                        + [damagingTrap('aFire.png', 10, width * i / 31,
+                                                        height * 44 / 900 + yBoundaryShip,
+                                                        elementalDamages={'fire': 21}) for i in range(1, 13)
                                            ] + [
-                                            damagingTrap('aFire.png', 26, width * i / 31,
-                                                         height * 44 / 900 + yBoundaryShip) for i in range(19, 31)
+                                            damagingTrap('aFire.png', 10, width * i / 31,
+                                                         height * 44 / 900 + yBoundaryShip,
+                                                         elementalDamages={'fire': 21}) for i in range(19, 31)
                                         ], isBossRoom=True),
 
                      room([0, 2, 10], 'ship', foes=[
@@ -73,8 +79,9 @@ class world:
                      room([0, 5, 10], 'ship', foes=[
                          foe('robotBodyguard', width / 2, height / 2, [0, 5, 10]),
                          foe('brokenTurret', width / 2, height / 3, [0, 5, 10]),
-                     ], damagingTraps=[damagingTrap('fireTrap2.png', 26, width / 20
-                                                    * (1 + 2 * i), height * (5 / 8 - i * 13 / 900)) for
+                     ], damagingTraps=[damagingTrap('fireTrap2.png', 10, width / 20
+                                                    * (1 + 2 * i), height * (5 / 8 - i * 13 / 900),
+                                                    elementalDamages={'fire': 21}) for
                                        i in range(10)],
                           waves=[[foe('flamingRobot', width / 4, height / 2, [0, 5, 10]),
                                   foe('flamingRobot', width * 3 / 4, height / 2, [0, 5, 10], ),
@@ -156,11 +163,12 @@ class world:
                                       hp=float('inf'), empowered=True)]),
 
                      room([0, 12, 10], 'gauntlet',
-                          enemyBullets=[bullet(random.randint(1, 3), random.randint(1, 3), 26,
+                          enemyBullets=[bullet(random.randint(1, 3), random.randint(1, 3), 10,
                                                'bouncySplittingProjectileFromWatchdog.png', width / 2,
                                                height / 2, linger=float('inf'), piercing=float('inf'), bounces=True,
                                                dissappearsAtEdges=False,
-                                               timeBeforeStop=float('inf')) for i in range(5)],
+                                               timeBeforeStop=float('inf'),
+                                               elementalDamages={'fire': 30}) for i in range(5)],
                           resetsBulletsOnRespawn=True,
                           foes=[foe('gauntletFly', width / 5, height / 2, [0, 12, 10],
                                       deathEffect='proRoom().locks = True; rooms.rooms[(-1, 13, 10)].damagingTraps = '
@@ -175,7 +183,7 @@ class world:
                                                           hp=float('inf'))])]),
 
                      room([-1, 13, 10], 'gauntlet',
-                          damagingTraps=[damagingTrap('aFire.png', 200, width * i / 40,
+                          damagingTraps=[damagingTrap('aFire.png', 20000, width * i / 40,
                                                       height * j / 30) for i in range(1, 40) for j in range(1, 25)],
                           specialRects={rect(pygame.Rect(0, 0, width, height * 3 / 4)): 'pro.hp = 0'}),
 
@@ -199,7 +207,8 @@ class world:
                      room([0, 14, 10], 'gauntlet',
                           foes=[foe('gauntletFly', width / 5, height / 2, [0, 14, 10],
                                     locksRoomOnAggression=True,
-                                    deathEffect='rooms.rooms[(-2, 12, 10)].damagingTraps=[damagingTrap("aFire.png",200,'
+                                    deathEffect='rooms.rooms[(-2, 12, 10)].damagingTraps='
+                                                '[damagingTrap("aFire.png",20000,'
                                                 ' width * i / 40, '
                                                 'height * j / 30) for i in range(1, 30) for j in range(1, 30)]; '
                                                 'rooms.rooms[(-2, 12, 10)].destroyFoes(); '
@@ -269,19 +278,24 @@ class world:
                              delaySprite='watchdogIdle1.png',
                              dependentFoes=[foe('hellhound', width / 2, height / 4, [-4, 11, 10],
                                                 spawnDelay=float('inf'), delaySprite = 'invisiblePixels.png')])],
-                          damagingTraps=[damagingTrap('aFire.png', 26, width * i / 31,
-                                                      height * 856 / 900) for i in range(32)] + [
-                                            damagingTrap('aFire.png', 26, width * 31 / 1600,
-                                                         (height - yBoundaryShip) * i / 14 + yBoundaryShip) for i in
+                          damagingTraps=[damagingTrap('aFire.png', 10, width * i / 31,
+                                                      height * 856 / 900,
+                                                      elementalDamages={'fire': 21}) for i in range(32)] + [
+                                            damagingTrap('aFire.png', 10, width * 31 / 1600,
+                                                         (height - yBoundaryShip) * i / 14 + yBoundaryShip,
+                                                         elementalDamages={'fire': 21}) for i in
                                             range(1, 14)
-                                        ] + [damagingTrap('aFire.png', 26, width * 1569 / 1600,
-                                                          (height - yBoundaryShip) * i / 14 + yBoundaryShip) for i in
+                                        ] + [damagingTrap('aFire.png', 10, width * 1569 / 1600,
+                                                          (height - yBoundaryShip) * i / 14 + yBoundaryShip,
+                                                          elementalDamages={'fire': 21}) for i in
                                              range(1, 14)]
-                                        + [damagingTrap('aFire.png', 26, width * i / 31,
-                                                        height * 44 / 900 + yBoundaryShip) for i in range(1, 13)
+                                        + [damagingTrap('aFire.png', 10, width * i / 31,
+                                                        height * 44 / 900 + yBoundaryShip,
+                                                        elementalDamages={'fire': 21}) for i in range(1, 13)
                                            ] + [
-                                            damagingTrap('aFire.png', 26, width * i / 31,
-                                                         height * 44 / 900 + yBoundaryShip) for i in range(19, 31)
+                                            damagingTrap('aFire.png', 10, width * i / 31,
+                                                         height * 44 / 900 + yBoundaryShip,
+                                                         elementalDamages={'fire': 21}) for i in range(19, 31)
                                         ], isBossRoom=True)
                      ]
 
