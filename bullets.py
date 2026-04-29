@@ -1,11 +1,11 @@
 import copy
 import time
 
-from variables import IMAGES, GAMESPEED, MOVESPEED, width, height, display
+from variables import IMAGES, GAMESPEED, MOVESPEED, width, height, display, diagonal
 from rects import rect
 
 # Please keep the sec, getPath, sqrt, and debuff import statements. Contrary to what Pycharm says, I need them.
-from definitions import getDegrees, sqrt, getRadians, pointDistance, blitWithOffset, sec, getPath
+from definitions import getDegrees, sqrt, getRadians, pointDistance, blitWithOffset, sec, getPath, angleToMouse
 from debuff import debuff
 
 import math
@@ -21,7 +21,10 @@ class bullet:
                  timeBeforeStop=1600, playerContactEffect = 'pass', alwaysChecksCollisionWithPro=False,
                  hitboxOnProjectile=None, debuffInflictions=[], firer=None, source=None, foeContactEffect='pass',
                  hitboxForFragmentsAsSplittingProjectile=None, additionalMethods={}, unusualTargets=[], knockback=None,
-                 stun=0, rotationByDuration=None, hitboxOnProjectilePerAnimationFrame=None, target=None, **extra):
+                 stun=0, rotationByDuration=None, hitboxOnProjectilePerAnimationFrame=None, target=None,
+                 damageSpacing=0, elementalDamages={}, bulletCollisionEffect=('False', 'pass'),
+                 damagingTrapCollisionEffect=('False', 'pass'), collisionCheckSpacing=1,
+                 collisionCheckRemainder=0, **extra):
         self.hr = hr
         self.vr = vr
         self.damage = damage
@@ -32,6 +35,19 @@ class bullet:
         self.stun = stun
         self.rotationByDuration = rotationByDuration
         self.target = target
+        self.damagingTrapCollisionEffect = damagingTrapCollisionEffect
+
+        # Self will only check collision when the frame number is congruent to self.collisionCheckRemainder
+        # mod self.collisionCheckSpacing. This lets projectiles avoid checking collision every frame for
+        # performance. This also lets burdensome groups of projectiles minimize performance issues by
+        # not all checking collision on the same frame by varying the collisionCheckRemainder.
+        self.collisionCheckSpacing = collisionCheckSpacing
+        self.collisionCheckRemainder = collisionCheckRemainder
+
+        # damageSpacing determines the frequency at which projectile can inflict damage.
+        # damageCooldowns tracks the cooldown for dealing damage to each enemy.
+        self.damageSpacing = damageSpacing
+        self.damageCooldowns = {}
 
         # Self may use self.relatedBullets to get or modify data on other related bullets.
         self.relatedBullets = []
@@ -78,6 +94,10 @@ class bullet:
 
         # self will check collision with everything in self.unusualTargets.
         self.unusualTargets = unusualTargets.copy()
+
+        # for each bullet collided with, if bulletCollisionEffect[0], then self will execute bulletCollisionEffect[1].
+        # Where the effect is executed, self will be called bullet and the other will be called other.
+        self.bulletCollisionEffect = bulletCollisionEffect
 
         # self.firer can be used to track who fired self, and self.source can be used to track which item was used to
         # fire self.
@@ -147,6 +167,10 @@ class bullet:
             self.animated = 1
             self.animation = animation
 
+        # I think that it is best to copy elementalDamages to avoid changing the default argument.
+        self.elementalDamages = elementalDamages.copy()
+
+        # Give other attributes based on the kwargs given.
         for stat in list(extra.keys()):
             exec(f'self.{stat} = extra[stat]')
 
@@ -157,6 +181,9 @@ class bullet:
         self.currentDuration += GAMESPEED
         self.timeBeforeStop -= GAMESPEED
         self.linger -= GAMESPEED
+
+        for i in self.damageCooldowns.keys():
+            self.damageCooldowns[i] -= GAMESPEED
 
         # Stop self's movement if needed.
         if self.timeBeforeStop <= 0:
@@ -187,11 +214,18 @@ class bullet:
                 self.hitbox = copy.deepcopy(self.hitboxOnProjectilePerAnimationFrame[int(self.animationFrame)])
                 self.hitbox.move(self.x, self.y)
 
+        if self.rotationByDuration is not None:
+            self.rotation = eval(self.rotationByDuration)
+
         # if needed, adjust self's position based on self.placeByDuration.
         if self.placeByDuration is not None:
             self.x = eval(self.placeByDuration)[0]
             self.y = eval(self.placeByDuration)[1]
-            self.hitbox = rect(self.place, self.rotation * math.pi / 180)
+            # Update self.hitbox.
+            self.hitbox = rect(IMAGES[self.sprite].get_rect(center=[self.x, self.y]),
+                               angle=self.rotation * math.pi / 180)
+
+            self.place = pygame.transform.rotate(IMAGES[self.sprite], self.rotation).get_rect(center=[self.x, self.y])
 
         # if needed, adjust self's position based on self.polarDurationBasedPlace.
         elif self.polarDurationBasedPlace is not None:
@@ -223,10 +257,6 @@ class bullet:
                 (self.place.bottom < 0 or self.place.right < 0 or self.place.left > width or self.place.top > height):
             self.linger = 0
 
-        if self.rotationByDuration is not None:
-            self.rotation = eval(self.rotationByDuration)
-            print(self.rotationByDuration, self.rotation)
-
         # Make self bounce off of a wall if necessary.
         elif self.bounces:
             if self.place.top < 0:
@@ -254,7 +284,7 @@ class bullet:
 
         # Call each of self's additional methods.
         for method in self.additionalMethods.keys():
-            method(*self.additionalMethods[method])
+            method(self, *self.additionalMethods[method])
 
         # Move self.hitbox.
         self.hitbox.move(self.x - oldX, self.y - oldY)
@@ -280,3 +310,9 @@ class bullet:
     def getSpriteWhenDelayed(self):
         """self.getSpriteWhenDelayed() returns the sprite that should be drawn to represent self when self.delay > 0."""
         return self.delayedAnimation[int((self.initialDelay - self.delay) % len(self.delayedAnimation))]
+
+    def knockBackFirer(self, strength=0.1, duration=20):
+        """Knocks back the firer at a speed of strength units per frame opposite to self.rotation. The nanoflame
+        revolver does this."""
+        self.firer.movementModifiers.append([-strength * math.cos(self.rotation * math.pi / 180),
+                                             strength * math.sin(self.rotation * math.pi / 180), duration])
