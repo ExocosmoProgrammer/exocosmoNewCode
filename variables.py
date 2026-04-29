@@ -1,6 +1,7 @@
 import pygame
 import os
 import random
+from displayInfo import displayInfo
 
 # I use the dictionary, 'IMAGES', to store sprites so that I don't have to use pygame.image.load function for
 # each new sprite that gets created.
@@ -18,10 +19,9 @@ width = display.get_width()
 height = display.get_height()
 fullscreenRect = pygame.Rect(0, 0, width, height)
 diagonal = (width ** 2 + height ** 2) ** (1 / 2)
-GAMESPEED = 6
+GAMESPEED = 7
+MOVESPEED = 1
 
-# TODO set MOVESPEED to 1.
-MOVESPEED = (random.randint(10, 13) / 10) ** 0
 # Rooms are divided into cells so that usually, only one environmental object can spawn in each cell. cells is a list
 # of each cell's corners.
 cells = [[width * i / 20, width * (i + 1) / 20, height * j / 20,
@@ -37,7 +37,7 @@ for i in os.listdir(getProperPath('images')):
             IMAGES[i] = pygame.transform.scale(IMAGES[i], (IMAGES[i].get_width() * width / 1600,
                                                IMAGES[i].get_height() * height / 900))
 
-        except pygame.error:
+        except (pygame.error, FileNotFoundError):
             pass
 
 for i in os.listdir(getProperPath('images/font')):
@@ -149,3 +149,10 @@ for i in relatedSongs:
     for j in i:
         relatedSongsDict[j] = [song for song in i if song != j]
 
+# Resize images as needed using Pygame because Windows is stupid and won't let me resize without maintaining
+# ratio.
+IMAGES['nanoflameRevolverLaser4.png'] =  \
+    pygame.transform.scale(IMAGES['nanoflameRevolverLaser4.png'],
+                           (diagonal / 2, IMAGES['nanoflameRevolverLaser4.png'].get_height() * height / 900))
+
+displayVars = displayInfo()
