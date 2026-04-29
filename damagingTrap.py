@@ -4,11 +4,12 @@ from definitions import draw
 
 
 class damagingTrap:
-    def __init__(self, sprite, damage, centerx, centery, animation=None):
+    def __init__(self, sprite, damage, centerx, centery, animation=None, elementalDamages={}):
         self.sprite = sprite
         self.damage = damage
         self.place = IMAGES[self.sprite].get_rect(center=(centerx, centery))
         self.hitbox = rect(self.place)
+        self.elementalDamages = elementalDamages.copy()
         # self.drawingMethod will be called to draw self and to update self's sprite if self is animated.
 
         if animation is None:
