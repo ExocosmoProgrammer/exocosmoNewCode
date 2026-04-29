@@ -5,10 +5,10 @@ import worldFile
 import copy
 
 from variables import (IMAGES, GAMESPEED, display, MOVESPEED, width, height, recipes, fullscreenRect,
-                       descriptionsPerCritter, descriptionsPerItem)
+                       descriptionsPerCritter, descriptionsPerItem, diagonal)
 from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle, \
     greater, getRadians, blitWithOffset, fillWithOffset, camelCaseToNormalText, normalTextToCamelCase, getEvents, \
-    temporarilyPlay, playSoundEffect
+    temporarilyPlay, playSoundEffect, angleToMouse
 from rects import rect
 from bullets import bullet
 from item import item
@@ -16,6 +16,7 @@ from word import word
 from plainSprites import plainSprite
 from debuff import debuff
 from textBox import textBox
+from variables import displayVars
 import traceback
 
 nanotechBulletImplosionAnimation = [f'nanotechRevolverBulletImpactFrame{i}.png' for i in range(1, 7) for j in
@@ -78,7 +79,8 @@ class player:
         self.speed = 1
         self.itemFunctions = {'nanotechRevolver': self.useNanotechRevolver,
                               'lumisFlamethrower': self.useLumisFlamethrower, 'jellyfish': self.useJellyfish,
-                              'lumiswoodBow': self.useLumisWoodBow, 'bagOfSand': self.useBagOfSand}
+                              'lumiswoodBow': self.useLumisWoodBow, 'bagOfSand': self.useBagOfSand,
+                              'nanoflameRevolver': self.useNanoflameRevolver}
         self.altItemFunctions = {'lumisFlamethrower': self.useLumisFlamethrowerAlt,
                                  'lumiswoodBow': self.useLumisWoodBowAlt, 'bagOfSand': self.useBagOfSandAlt}
         self.inventory = [item('empty', 'invisiblePixels.png', stackSize=1) for i in range(101)]
@@ -102,9 +104,16 @@ class player:
         self.potionSprites = [plainSprite('healthPotion.png', width / 25, height * 4 / 5),
                               plainSprite('healthPotion.png', width * 3 / 25, height * 4 / 5)]
         self.potionsFilledBar = plainSprite("potionFilledBar.png", width / 25, height * 71 / 90)
+
+        # TODO Finish adding the new stats bar.
+        self.statsBar = plainSprite("newPlayerStatsBar.png", width / 8, height / 8)
         self.song = 'Crashed.mp3'
         self.cooldownForControlledMovement = 0
         self.walkingSoundCooldown = 0
+
+        # Each element of self.movementModifiers should be a list of three elements. The first is horizontal knockback.
+        # The second is vertical knockback. The third is duration.
+        self.movementModifiers = []
 
         # self.healingCooldown exists so that two of the healing sound effect cannot overlap.
         self.healingCooldown = 0
@@ -117,10 +126,29 @@ class player:
                                                        'most potions that you can or have regenerated a potion since '
                                                        'last using one.'}}
 
+        # These elemental resistances are not percents.
+        self.elementalResistances = {}
+        self.defense = 0
+
         for i in range(3):
             for j in range(10):
+                if i < 2:
+                    sprite = 'inventoryBox.png'
+
+                elif j > 2:
+                    sprite = 'accessoryBox.png'
+
+                elif j == 2:
+                    sprite = 'leggingsSlot.png'
+
+                elif j == 1:
+                    sprite = 'armorSlot.png'
+
+                else:
+                    sprite = 'helmetSlot.png'
+
                 self.inventoryBoxes.append(plainSprite(
-                    'inventoryBox.png', j * boxWidth * 2 + width * 1 / 30 + boxWidth / 2,
+                    sprite, j * boxWidth * 2 + width * 1 / 30 + boxWidth / 2,
                                         i * 3 * boxHeight + height * 7 / 30 + boxHeight / 2))
 
         for stat in list(extra.keys()):
@@ -326,7 +354,7 @@ class player:
                                        firer=self, knockback=knockback, **kwargs))
 
     def fireInRandomSpread(self, damage, sprite, speed, qty, maxAngleInDegrees, animation=None, impactAnimation=None,
-                           timeBeforeStop=1600, piercing=1):
+                           timeBeforeStop=1600, piercing=1, **kwargs):
         mousePosition = pygame.mouse.get_pos()
         angleToMouse = -getRadians(mousePosition[0] - self.x, mousePosition[1] - self.y)
 
@@ -334,7 +362,7 @@ class player:
             angle = angleToMouse + random.randint(-maxAngleInDegrees, maxAngleInDegrees) * math.pi / 360
             self.bullets.append(bullet(speed * math.cos(angle), speed * math.sin(angle), damage, sprite, self.x,
                                        self.y, animation=animation, impactAnimation=impactAnimation,
-                                       timeBeforeStop=timeBeforeStop, piercing=piercing, firer=self))
+                                       timeBeforeStop=timeBeforeStop, piercing=piercing, firer=self, **kwargs))
 
     def attatchProjectileToSelf(self, bullet, connectorSprite, offset=(0, 0)):
         """Connect bullet to self using connectorSprite. For this function to work, bullet.firer must be self"""
@@ -357,50 +385,116 @@ class player:
         for i in self.proRoom().foes:
             i.hp = 0
 
+    def fireLaser(self, damage, sprite, linger=500, damageSpacing=30, animation=None, **kwargs):
+        """Fire a laser. sprite should not need to be in laserSprites from variables.py."""
+
+        # The laser should be moved offset from self to have an edge on self and face the right way.
+        angle = angleToMouse(self)
+        laserWidth = IMAGES[sprite].get_width()
+        offset = (math.cos(angle) * (laserWidth / 2 + width / 80), -math.sin(angle) * (laserWidth / 2 + height / 20))
+        self.bullets.append(bullet(0, 0, damage, sprite, self.x + offset[0], self.y + offset[1],
+                                   linger=linger, firer=self,
+                                   rotationByDuration='angleToMouse(self.firer) * 180 / math.pi',
+                                   durationBasedPlace='[self.firer.x + math.cos(self.rotation * math.pi / 180) * '
+                                                      f'(IMAGES[self.sprite].get_width() / 2 + {width / 80}), '
+                                                      'self.firer.y - math.sin(self.rotation * math.pi / 180) * '
+                                                     f'(IMAGES[self.sprite].get_width() / 2 + {height / 20})]',
+                                   rotation=angle, dissappearsAtEdges=False, piercing=float('inf'),
+                                   damageSpacing=damageSpacing,
+                                   animation=animation, **kwargs))
+
     def useNanotechRevolver(self, **kwargs):
         """The useNanotechRevolver function will be your attack while your active item is the nanotechRevolver."""
-        self.fireToMouse(1, 'basicRangeProjectile_d.png', 6.5,
+        self.fireToMouse(1, 'basicRangeProjectile_d.png', 7,
                          impactAnimation=nanotechBulletImplosionAnimation)
-        self.fireCooldown = 60
+        self.fireCooldown = 38
+        self.activeItem.standardCooldown = 100
         playSoundEffect('nanotechRevolver.wav')
 
+    def useNanoflameRevolver(self, **kwargs):
+        """Use the nanoflameRevolver attack."""
+
+        animation = ([f'nanoflameRevolverLaser{i}.png' for i in range(1, 4) for j in range(34)] +
+                     ['nanoflameRevolverLaser4.png'] * 300 + ['nanoflameRevolverLaser5.png'] * 100)
+        self.fireLaser(0, 'nanoflameRevolverLaser1.png', damageSpacing=30,
+                       elementalDamages = {'fire': 2}, animation=animation, additionalMethods={bullet.knockBackFirer: tuple()})
+        self.fireCooldown = 600
+        self.activeItem.cooldown = 2400
+
+        # Add screen shake.
+        displayVars.screenShakeDuration = greater(displayVars.screenShakeDuration, 500)
+
     def useLumisFlamethrower(self, **kwargs):
-        self.fireInConsistentSpread(0.3, 'spiderProjectile1.png', 8, 5, math.pi / 8,
+        self.fireInConsistentSpread(0, 'spiderProjectile1.png', 8, 5, math.pi / 8,
                                     animation=[f'spiderProjectile{i}.png' for i in [1, 2] for j in range(30)],
-                                    linger=100)
-        self.fireCooldown = 45
+                                    linger=100, elementalDamages = {'lumis': 0.3})
+        self.fireCooldown = 38
+        self.activeItem.standardCooldown = 56
 
     def useLumisFlamethrowerAlt(self, **kwargs):
-        for i in range(5):
-            self.fireInRandomSpread(0.002, 'desertCaveMothProjectile1.png', 2 + i / 4, 18,
-                                    60,
+        explosionAnimation = [f'explosion{i}.png' for i in range(1, 8) for j in range(35)]
+
+        for i in range(4):
+            self.fireInRandomSpread(0, 'desertCaveMothProjectile1.png', 1 + i / 8, 6,
+                                    45,
                                     animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] for j in range(15)],
-                                    timeBeforeStop=100, piercing=200000)
-        self.fireCooldown = 100
+                                    timeBeforeStop=300, piercing=200000, damageSpacing=320,
+                                    elementalDamages={'lumis': 0.15},
+                                    bulletCollisionEffect=('\'fire\' in other.elementalDamages.keys()',
+                                                          'bullet.elementalDamages={\'fire\': 2}; '
+                                                          'bullet.sprite = \'explosion1.png\'; bullet.rotation = 0; '
+                                                          'bullet.bulletCollisionEffect = (\'False\', \'pass\'); '
+                                                          'bullet.damageSpacing = float(\'inf\');'
+                                                          f"bullet.animation = {explosionAnimation};"
+                                                          f'bullet.linger = 240; bullet.foeContactEffect = "pass";'
+                                                          f'bullet.damagingTrapCollisionEffect=(\'False\', \'pass\')'),
+                                    foeContactEffect='if "fire" in foe.elementalDamages.keys(): '
+                                                     'projectile.elementalDamages={\'fire\': 2}; '
+                                                     'projectile.sprite = \'explosion1.png\'; projectile.rotation = 0; '
+                                                     'projectile.bulletCollisionEffect = (\'False\', \'pass\'); '
+                                                     'projectile.damageSpacing = float(\'inf\');'
+                                                     f"projectile.animation = {explosionAnimation};"
+                                                     f'projectile.linger = 240; projectile.foeContactEffect = "pass";'
+                                                     f'projectile.damagingTrapCollisionEffect=(\'False\', \'pass\')',
+                                    damagingTrapCollisionEffect=('\'fire\' in other.elementalDamages.keys()',
+                                                          'bullet.elementalDamages={\'fire\': 2}; '
+                                                          'bullet.sprite = \'explosion1.png\'; bullet.rotation = 0; '
+                                                          'bullet.bulletCollisionEffect = (\'False\', \'pass\'); '
+                                                          'bullet.damageSpacing = float(\'inf\');'
+                                                          f"bullet.animation = {explosionAnimation};"
+                                                          f'bullet.linger = 240; bullet.foeContactEffect = "pass";'
+                                                          f'bullet.damagingTrapCollisionEffect=(\'False\', \'pass\')'),
+                                    collisionCheckSpacing=4, collisionCheckRemainder=i)
+        self.fireCooldown = 38
+        self.activeItem.altCooldown = 3000
 
     def useJellyfish(self, **kwargs):
-        self.fireToMouse(10, 'desertCaveJellyfishFrame1.png', 7.5,
+        # This attack inflicts jellyfish type damage as opposed to regular.
+        self.fireToMouse(0, 'desertCaveJellyfishFrame1.png', 7.5,
                          animation=[f'desertCaveJellyfishFrame{i}.png' for i in range(1, 5) for j in range(20)],
                          debuffInflictions=[debuff('nanotechRevolverBulletImpactFrame1.png',
                                                    'self.speed *= 2 / 3; self.hp -= GAMESPEED / 100',
                                                    5400,
                                                    effectUponEnding='debuff.source.source.cooldown = 900')],
                          source=self.activeItem,
-                         foeContactEffect='projectile.source.cooldown = 5400;')
+                         foeContactEffect='projectile.source.cooldown = 5400;', elementalDamages={'jellyfish': 10})
         self.bullets[-1].debuffInflictions[0].source = self.bullets[-1]
         self.activeItem.cooldown = 900
+        self.fireCooldown = 38
         playSoundEffect('jellyfishThrown.wav')
 
     def useLumisWoodBow(self, **kwargs):
-        self.fireToMouse(2.5, 'spiderProjectile1.png', 10)
-        self.fireCooldown = 100
+        self.fireToMouse(3, 'spiderProjectile1.png', 10)
+        self.fireCooldown = 38
+        self.activeItem.standardCooldown = 125
 
     def useLumisWoodBowAlt(self, offset=(0, 0), **kwargs):
         self.fireToMouse(3, 'desertCaveFlyMinibossLargeProjectile1.png', 8)
         self.attatchProjectileToSelf(self.bullets[-1], 'desertCaveFlyMinibossLaserProjectile1.png',
                                      offset=offset)
         self.makeProjectilePullSelfUponHittingFoe(self.bullets[-1], 7.5)
-        self.activeItem.cooldown = 1260
+        self.activeItem.altCooldown = 1260
+        self.fireCooldown = 38
 
     def useBagOfSand(self, **kwargs):
         """Use the bag of sand's standard attack method."""
@@ -421,6 +515,7 @@ class player:
 
         # Set the bag of sand's standard cooldown.
         self.activeItem.standardCooldown = 3600
+        self.fireCooldown = 38
 
     def useBagOfSandAlt(self, **kwargs):
         """Use the bag of sand's alternate attack method."""
@@ -441,7 +536,8 @@ class player:
             f"greater(displayVars.screenShakeDuration, 50); time.sleep(0.03)")
 
         # Set self.fireCooldown.
-        self.fireCooldown = 180
+        self.fireCooldown = 38
+        self.activeItem.altCooldown = 180
 
     def startSprinting(self):
         self.sprinting = 1
@@ -549,6 +645,23 @@ class player:
             elif event.key == pygame.K_SPACE:
                 self.sprinting = 0
 
+    def getWeapons(self):
+        """Gives some weapons."""
+
+        self.gainItem(item('lumisFlamethrower', 'basicSpreadInInventory.png', 'Is a shotgun.',
+                           stackSize=1))
+        self.gainItem(item('nanoflameRevolver', 'basicSpreadInInventory.png', 'Fires a laser.',
+                           stackSize=1))
+        self.gainItem(item('jellyfish', 'desertCaveJellyfishFrame1.png', 'Is a jellyfish.',
+                           stackSize=1,
+                           animation=[f'desertCaveJellyfishFrame{i}.png' for i in range(1, 5) for j in range(50)]))
+        self.gainItem(item('lumiswoodBow', 'basicSpreadInInventory.png', 'Fires an arrow.',
+                           stackSize=1))
+        self.gainItem(item('nanotechRevolver', 'pistolInInventory.png', 'Fires a bullet.',
+                           stackSize=1))
+        self.gainItem(item('bagOfSand', 'bagOfSand.png', 'Contains sand.',
+                           stackSize=1))
+
     def updateSpeed(self):
         if self.slideTime <= 0:
             if self.sprinting:
@@ -591,11 +704,20 @@ class player:
         self.walkingSoundCooldown -= GAMESPEED
         self.healingCooldown -= GAMESPEED
 
+        # Reduce the duration of knockback to the player.
+        for modifier in self.movementModifiers:
+            modifier[2] -= GAMESPEED
+
+            if modifier[2] <= 0:
+                self.movementModifiers.remove(modifier)
+
+        # Reduce item cooldowns.
         for i in self.inventory[0: 30]:
             i.cooldown -= GAMESPEED
             i.standardCooldown -= GAMESPEED
             i.altCooldown -= GAMESPEED
 
+        # Modify self.oxygen as needed and kill self if self.oxygen <= 0.
         if currentRoom.oxygenLoss:
             self.oxygen -= currentRoom.oxygenLoss
 
@@ -605,6 +727,7 @@ class player:
         else:
             self.oxygen = self.maxOxygen
 
+        # Update movement speed.
         self.updateSpeed()
 
         # Add creatures to the journal as needed.
@@ -956,16 +1079,23 @@ class player:
 
     def move(self):
         """The move function makes the player move."""
+
         oldX = self.x
         oldY = self.y
+
+        # self.movementModifiers is used for knockback.
         (hr, vr) = (self.hr * self.speed, self.vr * self.speed) if self.cooldownForControlledMovement <= 0 else \
             (self.forcedHr, self.forcedVr)
-        self.x += hr * GAMESPEED * MOVESPEED
-        self.y += vr * GAMESPEED * MOVESPEED
+        hr += sum([i[0] for i in self.movementModifiers])
+        vr += sum([i[1] for i in self.movementModifiers])
+        self.x += hr * GAMESPEED * MOVESPEED * 0.75
+        self.y += vr * GAMESPEED * MOVESPEED * 0.75
         self.slideTime -= GAMESPEED
         self.place.centerx = self.x
         self.place.centery = self.y
         self.updateHitbox()
+
+        # TODO Consider why the next line could be here.
         self.proRoom()
 
         for thing in self.proRoom().environmentObjects:
@@ -976,6 +1106,10 @@ class player:
                 self.place.centery = self.y
                 self.updateHitbox()
 
+            # TODO Try to make this case impossible or extremely rare. Is the case possible except when the
+            # TODO player enters a new room where an object is?
+            # TODO Perhaps, make the player immediately go back to the previous room if there is an object
+            # TODO where they enter.
             if thing.hitbox.checkCollision(self.hitboxForObjectCollision):
                 thing.hp = 0
 
