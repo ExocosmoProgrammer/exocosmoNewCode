@@ -5,11 +5,12 @@ import datetime
 import pygame
 import copy
 
-from definitions import draw, drawToFullScreen, lesser, checkMouseCollision, loadWithPickle, saveWithPickle,\
-    greater, sign, pointDistance, percentChance, getPath, getDegrees, sqrt, blitWithOffset, playSoundEffect
+from definitions import (draw, drawToFullScreen, lesser, checkMouseCollision, loadWithPickle, saveWithPickle,\
+    greater, sign, pointDistance, percentChance, getPath, getDegrees, sqrt, blitWithOffset, playSoundEffect,
+                         playAnimation)
 from droppedItem import droppedItem
 import random
-from variables import display, IMAGES, width, height, GAMESPEED, diagonal, relatedSongsDict
+from variables import display, IMAGES, width, height, GAMESPEED, diagonal, relatedSongsDict, displayVars
 from button import button
 from pro import player
 from temporaryAnimation import temporaryAnimation
@@ -23,9 +24,11 @@ from teleporter import teleporter
 
 pygame.mixer.init()
 pygame.mixer.music.set_volume(1)
-displayVars = displayInfo()
 displayVars.screenShakeDuration = 0
 displayVars.screenOffset = [0, 0]
+
+# Frame is the number of the current frame. Some projectiles don't check collision every frame.
+frame = 1
 
 
 # Create some intermission screens.
@@ -115,6 +118,7 @@ def load():
         pro.aggressiveFoes = []
         pro.hr = 0
         pro.vr = 0
+        pro.bullets = []
 
         for room in rooms.rooms.values():
             #room.getUpdate()
@@ -205,7 +209,7 @@ def drawGame():
         draw(pro, offset=displayVars.screenOffset)
 
         for enemy in currentRoom.foes:
-            enemy.hitbox.showCollision(pro.hitbox)
+            #enemy.hitbox.showCollision(pro.hitbox)
 
             if enemy.spawnDelay <= 0:
                 if enemy.rotated:
@@ -232,7 +236,8 @@ def drawGame():
 
         for projectile in pro.bullets + enemyBullets + [i for i in proRoom().enemyBullets if i.linger > 0]:
             if projectile.linger > 0 and projectile.delay <= 0:
-               projectile.hitbox.showCollision(pro.hitbox, length=10)
+               #projectile.hitbox.showCollision(pro.hitbox, length=10)
+               pass
 
             if projectile.delay <= 0:
                 draw(projectile, projectile.rotation, offset=displayVars.screenOffset)
@@ -378,7 +383,13 @@ def moveBullets():
 def checkCollisionWithPro(projectile):
     if eval(projectile.checksCollisionWhen) and \
             projectile.delay <= 0 and projectile.hitbox.checkCollision(pro.hitbox):
-        pro.hurt(projectile.damage)
+        damage = projectile.damage * (1 - pro.defense)
+
+        for element in projectile.elementalDamages.keys():
+            defense = pro.elementalResistances[element] if element in pro.elementalResistances.keys() else 0
+            damage += projectile.elementalDamages[element] * (1 - defense)
+
+        pro.hurt(damage)
         projectile.piercing -= 1
         exec(projectile.playerContactEffect)
 
@@ -393,20 +404,33 @@ def checkCollisionWithPro(projectile):
 
 
 def checkDamagingCollisionsToPro():
+    # enemyBullets may exclude proRoom().enemyBullets.
     if pro.invincibility <= 0:
-        for projectile in enemyBullets:
+        for projectile in enemyBullets + proRoom().enemyBullets:
             if checkCollisionWithPro(projectile):
                 return 1
 
         for foe in currentRoom.foes:
             if foe.spawnDelay <= 0 < foe.damage and foe.hitbox.checkCollision(pro.hitbox):
-                pro.hurt(foe.damage)
+                damage = foe.damage * (1 - pro.defense)
+
+                for element in foe.elementalDamages.keys():
+                    defense = pro.elementalResistances[element] if element in pro.elementalResistances.keys() else 0
+                    damage += foe.elementalDamages[element] * (1 - defense)
+
+                pro.hurt(damage)
 
                 return 1
 
         for trap in currentRoom.damagingTraps:
             if trap.hitbox.checkCollision(pro.hitbox):
-                pro.hurt(trap.damage)
+                damage = trap.damage * (1 - pro.defense)
+
+                for element in trap.elementalDamages.keys():
+                    defense = pro.elementalResistances[element] if element in pro.elementalResistances.keys() else 0
+                    damage += trap.elementalDamages[element] * (1 - defense)
+
+                pro.hurt(damage)
                 return 1
 
     else:
@@ -450,14 +474,27 @@ def checkCollisionsWithPro():
 
 
 def checkCollisionWithFoe(projectile, foe):
-    if eval(projectile.checksCollisionWhen) and foe.spawnDelay <= 0 and foe.hp > 0 and \
+    """Checks collision with projectile and foe and deals with consequences."""
+
+    # For collision to count, the projectile must be meant to check collisions, the foe must be spawned and alive,
+    # the foe cannot be shielded, and the projectile must not currently have a cooldown to hurt the foe.
+    if frame % projectile.collisionCheckSpacing == projectile.collisionCheckRemainder and \
+            eval(projectile.checksCollisionWhen) and foe.spawnDelay <= 0 and foe.hp > 0 and \
             projectile.hitbox.checkCollision(foe.hitbox):
-        if foe.shieldedBy not in currentRoom.foes:
+        if foe.shieldedBy not in currentRoom.foes and not \
+                (foe in projectile.damageCooldowns.keys() and projectile.damageCooldowns[foe] > 0):
             # Calculate the damage inflicted
             damage = projectile.damage if projectile.firer == pro else projectile.damage / 140
             damage *= (100 - foe.percentDR) / 100
+
+            # Add elemental damage.
+            for element in projectile.elementalDamages.keys():
+                resistance = foe.elementalResistances[element] if element in foe.elementalResistances.keys() else 0
+                damage += projectile.elementalDamages[element] * (1 - resistance)
+
+            # Do effects of the collision.
             foe.hp -= damage
-            currentRoom.damageMarkers.append(damageMarker(damage, projectile.x, projectile.y))
+            currentRoom.damageMarkers.append(damageMarker(damage, foe.x, foe.y))
             exec(projectile.foeContactEffect)
             foe.stun = greater(foe.stun, projectile.stun)
 
@@ -468,8 +505,12 @@ def checkCollisionWithFoe(projectile, foe):
             if projectile.knockback is not None:
                 foe.movementModifiers.append(projectile.knockback)
 
+            # Set the cooldown for projectile to hurt foe again.
+            projectile.damageCooldowns[foe] = projectile.damageSpacing
+
+            # Recharge potions.
             if projectile.firer == pro:
-                pro.potionRechargeProgress += projectile.damage
+                pro.potionRechargeProgress += damage
 
                 if pro.potionRechargeProgress >= 40 and pro.potions < pro.maxPotions:
                     pro.potionRechargeProgress = 0
@@ -498,9 +539,10 @@ def checkCollisionsToFoes():
 def checkCollisionsToEnvironmentObjects():
     for thing in currentRoom.environmentObjects:
         for projectile in pro.bullets + enemyBullets:
-            if projectile.hitbox.checkCollision(thing.hitbox):
+            if frame % projectile.collisionCheckSpacing == projectile.collisionCheckRemainder and \
+                    projectile.hitbox.checkCollision(thing.hitbox):
                 projectile.piercing -= 1
-                thing.hp -= projectile.damage
+                thing.hp -= projectile.damage + sum(projectile.elementalDamages.values())
 
                 if thing.hp <= 0 and thing in currentRoom.environmentObjects:
                     currentRoom.environmentObjects.remove(thing)
@@ -523,13 +565,30 @@ def checkUnusualCollisions():
     """Check collisions that are not checked by any other function. This can be necessary if projectiles check
     collision with unusual targets, for example, when foes fire at each other."""
 
-    for bullet in enemyBullets + pro.bullets:
-        for target in bullet.unusualTargets:
-            if target == pro and pro.invincibility <= 0:
-                checkCollisionWithPro(bullet)
+    for bullet in enemyBullets + pro.bullets + proRoom().enemyBullets:
+        if frame % bullet.collisionCheckSpacing == bullet.collisionCheckRemainder:
+            # Execute projectiles' effects for collision with other projectiles. This lets the alt lumis flamethrower
+            # attack catch fire upon hitting a fire projectile.
+            if bullet.bulletCollisionEffect[0] != 'False':
+                for other in enemyBullets + pro.bullets + proRoom().enemyBullets:
+                    if eval(bullet.bulletCollisionEffect[0]) and bullet.hitbox.checkCollision(other.hitbox):
+                        exec(bullet.bulletCollisionEffect[1])
 
-            elif type(target) is foe:
-                checkCollisionWithFoe(bullet, target)
+            # Check collisions with foes and pro.
+            for target in bullet.unusualTargets:
+                if target == pro and pro.invincibility <= 0:
+                    checkCollisionWithPro(bullet)
+
+                elif type(target) is foe:
+                    checkCollisionWithFoe(bullet, target)
+
+            # Execute projectiles' effects for collision with traps. This lets the alt lumis flamethrower
+            # attack catch fire upon hitting a fire trap.
+            if bullet.damagingTrapCollisionEffect[0] != 'False':
+                for other in proRoom().damagingTraps:
+                    if eval(bullet.damagingTrapCollisionEffect[0]) and bullet.hitbox.checkCollision(other.hitbox):
+                        exec(bullet.damagingTrapCollisionEffect[1])
+
 
 def checkCollisions():
     """checkCollisions() checks collision for every case where collision needs to be checked."""
@@ -680,38 +739,56 @@ def handleScaryCooldownAndSpawningScary():
 def roomSwitchingProcedure():
     #switchMusic()
     global currentRoom
+
+    # Get rid of projectiles and animations.
     clearBullets()
     currentRoom.temporaryAnimations = []
     currentRoom = proRoom()
     pro.bullets = []
+
+    # Give some invincibility.
     pro.invincibility = 200
+
+    # Make the scary work right if you are in the lumis lake.
     handleScaryCooldownAndSpawningScary()
 
+    # Execute one time effects, such as creating teleporters in the ship, for entering the new room.
     if proRoom().oneTimeEntranceEffect is not None:
         exec(proRoom().oneTimeEntranceEffect)
         proRoom().oneTimeEntranceEffect = None
 
+    # Add enemies and resources to rooms as desired.
     for spot in rooms.rooms.values():
-        if spot.difficulty == -1:
+        # Only sufficiently distant rooms can respawn enemies here.
+        xDistance = abs(spot.coordinate[0] - pro.room[0])
+        yDistance = abs(spot.coordinate[1] - pro.room[1])
+        zDistance = abs(spot.coordinate[2] - pro.room[2])
+
+        # Spawn enemies if needed.
+        if spot.difficulty == -1 and (xDistance > 2 or yDistance > 2 or zDistance > 0):
             try:
                 spot.spawnFoesFromRoomSwitch()
 
             except AttributeError or IndexError:
                 pass
 
+        # Spawn resources if needed.
         spot.spawnResourcesFromRoomSwitch()
 
+    # Switch between calm and combat music if appropriate.
     if currentRoom.foes:
         play(currentRoom.combatSong)
 
     else:
         play(currentRoom.calmSong)
 
+    # If any enemies are supposed to play special music, then play that. This is mainly for bosses.
     for enemy in currentRoom.foes:
         if enemy.specialSong is not None:
             play(enemy.specialSong, volume=0.15 * enemy.specialSongVolumeMultiplier)
             break
 
+    # Save the game.
     save()
 
 
@@ -720,11 +797,12 @@ def handleScreenShake():
     # Reduce the duration of screen shake.
     displayVars.screenShakeDuration -= GAMESPEED
 
+    # TODO Let there be multiple screen shake sources with different durations.
     # Shake the screen if there is screen shake.
     if displayVars.screenShakeDuration > 0:
         for i in range(2):
             # Modify the screen's offset.
-            displayVars.screenOffset[i] += random.randint(-2, 2) * GAMESPEED
+            displayVars.screenOffset[i] += random.randint(-2, 2) * GAMESPEED / 4
 
             # Make sure that the screen's offset is not too large.
             displayVars.screenOffset[i] = greater(lesser(displayVars.screenOffset[i], [width, height][i] / 5),
@@ -858,8 +936,9 @@ while True:
     while pro.hp > -float('0'):
         try:
             timeTaken = runGame().seconds
-            positionInSong += greater(timeTaken, 1 / 27)
-            time.sleep(greater(1 / 27 - timeTaken, 0))
+            positionInSong += greater(timeTaken, 1 / 36)
+            time.sleep(greater(1 / 36 - timeTaken, 0))
+            frame += 1
 
         except KeyboardInterrupt:
             pro.hr = 0
@@ -867,5 +946,7 @@ while True:
             save()
             sys.exit(0)
 
+    # The following code is executed when the player dies.
     playSoundEffect('death.wav', volume=0.2)
+    playAnimation([f'death{i}.png' for i in range(1, 15)])
     respawn()
