@@ -3,6 +3,7 @@ import pickle
 import random
 import pygame
 import pydub
+import time
 
 from pygame import mixer
 from variables import display, IMAGES, BACKGROUNDS, width, height, fullscreenRect, playerHeight, getProperPath
@@ -346,3 +347,26 @@ def playSoundEffect(effect, volume=0.3):
     soundEffect.play()
 
 
+def angleToMouse(obj):
+    """Returns the angle from object obj with attributes x and y to the mouse."""
+
+    return getRadians(pygame.mouse.get_pos()[0] - obj.x, pygame.mouse.get_pos()[1] - obj.y)
+
+
+def degToMouse(obj):
+    """Returns the degrees from object obj with attributes x and y to the mouse."""
+
+    return getDegrees(pygame.mouse.get_pos()[0] - obj.x, pygame.mouse.get_pos()[1] - obj.y)
+
+
+def playAnimation(animation, pause=0.2, fillBeforeFrames=None):
+    """Plays the animation, pausing for pause seconds after each frame. Fills the screen with color fillBeforeFrames
+    if it is not None."""
+
+    for i in animation:
+        if fillBeforeFrames is not None:
+            display.fill(fillBeforeFrames)
+
+        display.blit(IMAGES[i], fullscreenRect)
+        pygame.display.flip()
+        time.sleep(pause)
