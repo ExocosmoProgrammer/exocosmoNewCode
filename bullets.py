@@ -24,7 +24,7 @@ class bullet:
                  stun=0, rotationByDuration=None, hitboxOnProjectilePerAnimationFrame=None, target=None,
                  damageSpacing=0, elementalDamages={}, bulletCollisionEffect=('False', 'pass'),
                  damagingTrapCollisionEffect=('False', 'pass'), collisionCheckSpacing=1,
-                 collisionCheckRemainder=0, **extra):
+                 collisionCheckRemainder=0, followsProWhenDelayed=False, **extra):
         self.hr = hr
         self.vr = vr
         self.damage = damage
@@ -36,6 +36,9 @@ class bullet:
         self.rotationByDuration = rotationByDuration
         self.target = target
         self.damagingTrapCollisionEffect = damagingTrapCollisionEffect
+
+        # self.followsProWhenDelayed determines whether self will follow the player whenever self is delayed.
+        self.followsProWhenDelayed = followsProWhenDelayed
 
         # Self will only check collision when the frame number is congruent to self.collisionCheckRemainder
         # mod self.collisionCheckSpacing. This lets projectiles avoid checking collision every frame for
@@ -316,3 +319,14 @@ class bullet:
         revolver does this."""
         self.firer.movementModifiers.append([-strength * math.cos(self.rotation * math.pi / 180),
                                              strength * math.sin(self.rotation * math.pi / 180), duration])
+
+    def simpleCopy(self):
+        """This is a way of copying self. It is quicker than deepcopy. Also, an actual deepcopy is
+        not always wanted. Eg. I may not want to create a deepcopy of self.firer for the result. This may not always
+        be enough. I will not make copies of every list, dict, or custom type attribute. If needed,
+        replace some attributes of the result with copies of those attributes after calling this method."""
+
+        result = copy.copy(self)
+        result.place = self.place.copy()
+        result.hitbox = self.hitbox.copy()
+        return result
