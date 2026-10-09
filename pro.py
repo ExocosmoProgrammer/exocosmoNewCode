@@ -8,7 +8,7 @@ from variables import (IMAGES, GAMESPEED, display, MOVESPEED, width, height, rec
                        descriptionsPerCritter, descriptionsPerItem, diagonal)
 from definitions import getDirection, lesser, getPath, draw, checkMouseCollision, loadWithPickle, saveWithPickle, \
     greater, getRadians, blitWithOffset, fillWithOffset, camelCaseToNormalText, normalTextToCamelCase, getEvents, \
-    temporarilyPlay, playSoundEffect, angleToMouse
+    temporarilyPlay, playSoundEffect, angleToMouse, sqrt
 from rects import rect
 from bullets import bullet
 from item import item
@@ -35,6 +35,9 @@ class player:
         self.inventoryShown = 0
         self.room = [0, 0, 10]
         self.bullets = []
+
+        # In the actions method, at the start, I multiply each new bullet's damage by self.attackMultiplier.
+        self.oldBullets = []
         self.sprinting = 0
         self.sprite = 'newWalkingAnimation_s1.png'
         self.place = IMAGES[self.sprite].get_rect(center=(display.get_size()[0] / 2, display.get_size()[1] / 2))
@@ -76,6 +79,8 @@ class player:
         self.hpRect = pygame.Rect(width / 160, height / 90, width * 61 / 400 * self.hp / self.maxHp, height * 9 / 450)
         self.bullets = []
         self.invincibility = 0
+
+        # Self.speed is self's movement speed not counting temporary speed bonuses from self.temporarySpeedMultipliers.
         self.speed = 1
         self.itemFunctions = {'nanotechRevolver': self.useNanotechRevolver,
                               'lumisFlamethrower': self.useLumisFlamethrower, 'jellyfish': self.useJellyfish,
@@ -129,23 +134,54 @@ class player:
         # These elemental resistances are not percents.
         self.elementalResistances = {}
         self.defense = 0
+        self.potionHealing = 70
+        self.attackMultiplier = 1
+
+        # Each dict in self.temporaryAttackMultipliers should have keys 'multiplier' and 'duration' and appropriate
+        # corresponding values.
+        self.temporaryAttackMultipliers = []
+
+        # Each dict in self.temporaryHpBonuses should have keys 'hp' and 'duration' and appropriate corresponding
+        # values.
+        self.temporaryHpBonuses = []
+
+        # self.bonusHpRect will show temporary bonus hp if the player has any.
+        self.bonusHpRect = pygame.Rect(width / 160 + width * 61 / 400 * self.hp / self.maxHp, height / 90, 0,
+                                       height * 9 / 450)
+
+        # Each dict in self.temporarySpeedMultipliers should have keys 'multiplier' and 'duration' and appropriate
+        # corresponding values.
+        self.temporarySpeedMultipliers = []
+
+        # Self.totalTempSpeedMultiplier is the product of all temporary speed multipliers.
+        self.totalTempSpeedMultiplier = 1
+
+        # The following two variables track durations of buffs given by healing with lumiswood armor equipped.
+        self.buffDurationFromLumiswoodHelmet = 0
+        self.buffDurationFromLumiswoodLeggings = 0
+
+        # This cooldown spaces out the lumis left behind from the lumiswood leggings after dashing and healing.
+        self.lumisCooldownFromLumiswoodLeggings = 0
+
+        # When buffDurationFromLumiswoodLeggings >= 0. self will leave behind lumis while dashing and right after.
+        self.timeSinceDashing = 0
 
         for i in range(3):
             for j in range(10):
                 if i < 2:
                     sprite = 'inventoryBox.png'
 
-                elif j > 2:
+                elif j < 7:
                     sprite = 'accessoryBox.png'
 
-                elif j == 2:
-                    sprite = 'leggingsSlot.png'
+                elif j == 7:
+                    sprite = 'helmetSlot.png'
 
-                elif j == 1:
+                elif j == 8:
                     sprite = 'armorSlot.png'
 
                 else:
-                    sprite = 'helmetSlot.png'
+                    sprite = 'leggingsSlot.png'
 
                 self.inventoryBoxes.append(plainSprite(
                     sprite, j * boxWidth * 2 + width * 1 / 30 + boxWidth / 2,
@@ -210,16 +246,33 @@ class player:
         return 0
 
     def updateHpRect(self):
+        totalBonusHp = sum([i['hp'] for i in self.temporaryHpBonuses])
+        self.bonusHpRect = pygame.Rect(width / 160 + width * 61 / 400 * self.hp / self.maxHp, height / 90,
+                                       width * 61 / 400 * totalBonusHp / self.maxHp, height * 9 / 450)
         self.hpRect = pygame.Rect(width / 160, height / 90, width * 61 / 400 * self.hp / self.maxHp, height * 9 / 450)
+
 
     def hurt(self, damage, givesInvincibility=True, playHurtSound=True):
         """self.hurt(damage) reduces the player's hp by damage, makes the player temporarily invincible, and update's
         the display that shows the player's hp."""
 
         if damage:
+            # Every temporary hp bonus must be fully depleted before hp can normally be taken.
+            while self.temporaryHpBonuses and damage:
+                hpTaken = lesser(damage, self.temporaryHpBonuses[-1]['hp'])
+                self.temporaryHpBonuses[-1]['hp'] -= hpTaken
+
+                # I want to remove hp bonuses that have been depleted.
+                if self.temporaryHpBonuses[-1]['hp'] <= 0:
+                    self.temporaryHpBonuses.pop(-1)
+
+                damage -= hpTaken
+
+            # Inflict all remaining damage.
             self.hp -= damage
+
+            # Add invincibility if needed.
             self.invincibility = greater(250 if givesInvincibility else 0, self.invincibility)
-            self.updateHpRect()
 
         if playHurtSound:
             playSoundEffect('hurt.wav', volume=0.4)
@@ -229,7 +282,6 @@ class player:
         """Heal self by hp hp."""
 
         self.hp = lesser(self.maxHp, self.hp + hp)
-        self.updateHpRect()
 
     def progressAnimation(self):
         """The progressAnimation changes your animation, directionlessAnimation, and sprite as appropriate."""
@@ -269,6 +321,7 @@ class player:
             self.slideTime = 40
             self.stamina -= 300
             self.invincibility = 60
+            self.timeSinceDashing = 0
             playSoundEffect('dashing2.wav', volume=0.4)
 
     def usePotion(self):
@@ -276,11 +329,79 @@ class player:
 
         if self.potions and self.healingCooldown <= 0:
             self.potions -= 1
-            self.hp = lesser(self.hp + 70, self.maxHp)
+            self.hp = lesser(self.hp + self.potionHealing, self.maxHp)
             self.potionRechargeProgress = 0
-            self.updateHpRect()
             playSoundEffect('healing.wav')
             self.healingCooldown = 240
+
+            # Add temporary attack and hp if the player has the Lumiswood Pendant.
+            for i in self.inventory[20: 27]:
+                if i.name == 'Lumiswood Pendant':
+                    self.temporaryAttackMultipliers.append({'multiplier': 1.3, 'duration': 1260})
+                    self.temporaryHpBonuses.append({'hp': 30, 'duration': 1260})
+                    self.temporarySpeedMultipliers.append({'multiplier': 1.3, 'duration': 1260})
+                    break
+
+            # Give temporary buffs for each piece of lumiswood armor equipped.
+            if self.inventory[27].name == 'Lumiswood Helmet':
+                self.buffDurationFromLumiswoodHelmet = 1764
+                self.temporaryHpBonuses.append({'hp': 10, 'duration': 2520})
+
+            if self.inventory[28].name == 'Lumiswood Chestplate':
+                self.temporaryHpBonuses.append({'hp': 10, 'duration': 2520})
+                explosionAnimation = [f'explosion{i}.png' for i in range(1, 8) for j in range(36)]
+                oldBullets = self.bullets.copy()
+                self.fireInRandomSpread(0, 'desertCaveFlyMinibossLargeProjectile1.png', 1.25,
+                                        42,360,
+                                        timeBeforeStop=random.randint(150, 225), piercing=200000,
+                                        damageSpacing=float('inf'), elementalDamages={'lumis': 0.5},
+                                        bulletCollisionEffect=('\'fire\' in other.elementalDamages.keys()',
+                                                               'bullet.elementalDamages={\'fire\': 2}; '
+                                                               'bullet.sprite = \'explosion1.png\'; '
+                                                               'bullet.rotation = 0; '
+                                                               'bullet.bulletCollisionEffect = (\'False\', \'pass\'); '
+                                                               'bullet.damageSpacing = float(\'inf\');'
+                                                               f"bullet.animation = {explosionAnimation[:]};"
+                                                               f'bullet.linger = 240; bullet.foeContactEffect = "pass";'
+                                                               f'bullet.damagingTrapCollisionEffect='
+                                                               f'(\'False\', \'pass\');'
+                                                               f'bullet.animated = True'),
+                                        foeContactEffect='if "fire" in foe.elementalDamages.keys(): '
+                                                         'projectile.elementalDamages={\'fire\': 2}; '
+                                                         'projectile.sprite = \'explosion1.png\'; '
+                                                         'projectile.rotation = 0; '
+                                                         'projectile.bulletCollisionEffect = (\'False\', \'pass\'); '
+                                                         'projectile.damageSpacing = float(\'inf\');'
+                                                         f"projectile.animation = {explosionAnimation[:]};"
+                                                         f'projectile.linger = 240; projectile.foeContactEffect = '
+                                                         f'"pass";'
+                                                         f'projectile.damagingTrapCollisionEffect=(\'False\', '
+                                                         f'\'pass\');'
+                                                         f'bullet.animated = True',
+                                        damagingTrapCollisionEffect=('\'fire\' in other.elementalDamages.keys()',
+                                                                     'bullet.elementalDamages={\'fire\': 2}; '
+                                                                     'bullet.sprite = \'explosion1.png\'; '
+                                                                     'bullet.rotation = 0; '
+                                                                     'bullet.bulletCollisionEffect = '
+                                                                     '(\'False\', \'pass\'); '
+                                                                     'bullet.damageSpacing = float(\'inf\');'
+                                                                     f"bullet.animation = {explosionAnimation[:]};"
+                                                                     f'bullet.linger = 240; bullet.foeContactEffect = '
+                                                                     f'"pass";'
+                                                                     f'bullet.damagingTrapCollisionEffect=(\'False\', '
+                                                                     f'\'pass\');'
+                                                                     f'bullet.animated = True;'),
+                                        collisionCheckSpacing=4)
+
+                # Give the new projectiles random frames where they check collision.
+                newBullets = [i for i in self.bullets if i not in oldBullets]
+
+                for i in newBullets:
+                    i.collisionCheckRemainder = random.randint(0, 3)
+
+            if self.inventory[29].name == 'Lumiswood Leggings':
+                self.buffDurationFromLumiswoodLeggings = 2520
+                self.temporaryHpBonuses.append({'hp': 10, 'duration': 2520})
 
     def getPotion(self):
         "Gives the player a potion."
@@ -289,7 +410,7 @@ class player:
         playSoundEffect('gettingPotion.wav')
 
     def useActiveItem(self, offset=(0, 0)):
-        """Makes the player use their active item as appropriate."""
+        """Makes the player use their active item as appropriate. Returns 1 if self attacked and 0 otherwise."""
 
         if self.fireCooldown <= 0 and not self.sprinting and self.slideTime <= 0 and self.activeItem.cooldown <= 0:
             if pygame.mouse.get_pressed()[0] and self.activeItem.standardCooldown <= 0:
@@ -308,6 +429,8 @@ class player:
 
                 except KeyError:
                     pass
+
+        return 0
 
     def fireToMouse(self, damage, sprite, speed, knockbackStrength=0, knockbackDuration=50, **kwargs):
         """Fire a projectile towards the mouse."""
@@ -662,6 +785,14 @@ class player:
         self.gainItem(item('bagOfSand', 'bagOfSand.png', 'Contains sand.',
                            stackSize=1))
 
+    def getItems(self):
+        self.getWeapons()
+        self.inventory[20] = item('Lumiswood Pendant', 'boneInInventory.png',
+                                  "Healing gives you temporary bonuses but less hp.", stackSize=1)
+        self.inventory[27] = item("Lumiswood Helmet", "boneInInventory.png", "Is a helmet.")
+        self.inventory[28] = item("Lumiswood Chestplate", "boneInInventory.png", "Is a chestplate.")
+        self.inventory[29] = item("Lumiswood Leggings", "boneInInventory.png", "Is Leggings.")
+
     def updateSpeed(self):
         if self.slideTime <= 0:
             if self.sprinting:
@@ -704,6 +835,34 @@ class player:
         self.walkingSoundCooldown -= GAMESPEED
         self.healingCooldown -= GAMESPEED
 
+        # Update player attack.
+        self.attackMultiplier = 1
+
+        for i in self.temporaryAttackMultipliers:
+            self.attackMultiplier *= i['multiplier']
+            i['duration'] -= GAMESPEED
+
+            if i["duration"] <= 0:
+                self.temporaryAttackMultipliers.remove(i)
+
+        # Update self.totalTempSpeedMultiplier.
+        self.totalTempSpeedMultiplier = 1
+
+        for i in self.temporarySpeedMultipliers:
+            self.totalTempSpeedMultiplier *= i['multiplier']
+            i['duration'] -= GAMESPEED
+
+            if i["duration"] <= 0:
+                self.temporarySpeedMultipliers.remove(i)
+
+        # Update how much hp potions should heal for.
+        self.potionHealing = 70
+
+        for i in self.inventory[20: 27]:
+            if i.name == 'Lumiswood Pendant':
+                self.potionHealing /= 2
+                break
+
         # Reduce the duration of knockback to the player.
         for modifier in self.movementModifiers:
             modifier[2] -= GAMESPEED
@@ -727,11 +886,27 @@ class player:
         else:
             self.oxygen = self.maxOxygen
 
+        # Upate durations of temporary hp bonuses and remove any that are expired.
+        for bonus in self.temporaryHpBonuses:
+            bonus['duration'] -= GAMESPEED
+
+            if bonus['duration'] <= 0:
+                self.temporaryHpBonuses.remove(bonus)
+
+        # Update durations of buffs from healing with lumiswood armor equipped.
+        self.buffDurationFromLumiswoodLeggings -= GAMESPEED
+        self.buffDurationFromLumiswoodHelmet -= GAMESPEED
+        self.lumisCooldownFromLumiswoodLeggings -= GAMESPEED
+        self.timeSinceDashing += GAMESPEED
+
         # Update movement speed.
         self.updateSpeed()
 
         # Add creatures to the journal as needed.
         self.updateJournalEntriesForCritters()
+
+        # Update the hp display.
+        self.updateHpRect()
 
     def updateItemPositions(self):
         for i in range(30):
@@ -801,6 +976,7 @@ class player:
     def showInfo(self, offset=(0, 0)):
         draw(self.hpGoneSprite, offset=offset)
         fillWithOffset("#f20cc6", self.hpRect, offset)
+        fillWithOffset('#af0facff', self.bonusHpRect, offset)
         draw(self.hpBar, offset=offset)
         staminaRect = pygame.Rect(width / 160, height * 56 / 900, width * 31 / 100000 * self.stamina, height / 50)
         draw(self.staminaGoneSprite, offset=offset)
@@ -938,7 +1114,7 @@ class player:
         fillWithOffset((0, 0, 0), fullscreenRect, offset)
         for coordinate in list(rooms.rooms.keys()):
             if coordinate[2] == self.room[2] and (abs(self.room[1] - coordinate[1]) < 3 \
-                    and abs(self.room[0] - coordinate[0]) < 3 or True):
+                    and abs(self.room[0] - coordinate[0]) < 3):
                 blitWithOffset(IMAGES[rooms.rooms[coordinate].mapMarker],
                                pygame.Rect(width * (311 / 640 + (coordinate[0] - self.room[0]) * 47 / 1600),
                                            height * (434 / 900 - (coordinate[1] - self.room[1]) * 17 / 450),
@@ -1078,13 +1254,15 @@ class player:
                                                          self.place.width, height * 11 / 450))
 
     def move(self):
-        """The move function makes the player move."""
+        """The move function makes the player move. Returns 1 if self dashed or sprinted and 0 otherwise."""
 
         oldX = self.x
         oldY = self.y
 
+        totalSpeed = self.speed * self.totalTempSpeedMultiplier
+
         # self.movementModifiers is used for knockback.
-        (hr, vr) = (self.hr * self.speed, self.vr * self.speed) if self.cooldownForControlledMovement <= 0 else \
+        (hr, vr) = (self.hr * totalSpeed, self.vr * totalSpeed) if self.cooldownForControlledMovement <= 0 else \
             (self.forcedHr, self.forcedVr)
         hr += sum([i[0] for i in self.movementModifiers])
         vr += sum([i[1] for i in self.movementModifiers])
@@ -1182,6 +1360,8 @@ class player:
         if self.sprinting or self.slideTime > 0:
             return 1
 
+        return 0
+
     def foeStats(self):
         print([vars(foe) for foe in self.proRoom().foes])
 
@@ -1207,21 +1387,126 @@ class player:
 
     def actions(self, offset=(0, 0)):
         """The actions function will perform all the player's actions."""
+
+        # Do other stuff.
         self.getInput()
         self.updateStats()
         self.progressAnimation()
         returnedValues = []
 
-        if self.useActiveItem(offset=offset):
-            self.move()
+        # Multiply any new projectiles' damage by self.attackMultiplier.
+        for i in [i for i in self.bullets if i not in self.oldBullets]:
+            # Multiply new projectile damage by self.attackMultiplier.
+            i.damage *= self.attackMultiplier
 
+            for j in i.elementalDamages:
+                i.elementalDamages[j] *= self.attackMultiplier
+
+        # Update self.oldBullets.
+        self.oldBullets = self.bullets.copy()
+
+        # Attack if needed. Save whether the player attacked.
+        attacked = self.useActiveItem(offset=offset)
+
+        # Created homing, delayed copies of new projectiles if the player recently healed with the lumiswood helmet.
+        if self.buffDurationFromLumiswoodHelmet > 0:
+            for i in [i for i in self.bullets if i not in self.oldBullets]:
+                copyOfBullet = i.simpleCopy()
+                copyOfBullet.conditionalEffects = i.conditionalEffects.copy()
+                copyOfBullet.elementalDamages = i.elementalDamages.copy()
+
+                # Give the projectile homing when it is close enough to an enemy. The projectile should chase the
+                # closest available enemy when homing. I account for there maybe being a tie.
+                condition = ('[i for i in proRoom().foes if '
+                             'pointDistance([projectile.x, projectile.y], [i.x, i.y]) < 300]')
+                speed = sqrt(copyOfBullet.hr ** 2 + copyOfBullet.vr ** 2)
+                effect = (f'minDistanceToFoe = '
+                         f'min([pointDistance([projectile.x, projectile.y], [i.x, i.y]) for i in proRoom().foes]); '
+                         f'foeChosen = [i for i in proRoom().foes if '
+                         f'pointDistance([projectile.x, projectile.y], [i.x, i.y]) <= minDistanceToFoe][0];'
+                         f'path = getPath({speed}, [projectile.x, projectile.y], [foeChosen.x, foeChosen.y]);'
+                         f'projectile.hr = path[0]; projectile.vr = path[1]; ')
+
+                if condition in copyOfBullet.conditionalEffects.keys():
+                    copyOfBullet.conditionalEffects[condition] += ': ' + effect
+
+                else:
+                    copyOfBullet.conditionalEffects[condition] = effect
+
+                # The new projectile will have some delay. Make the projectile follow the player until appearing.
+                copyOfBullet.followsProWhenDelayed = True
+
+                # Divide the new projectile's damage by 4.
+                # TODO If for whatever reason, a projectile's damage changes over time, modifying a damage multiplier
+                # TODO attribute may be better.
+                copyOfBullet.damage /= 4
+
+                for i in copyOfBullet.elementalDamages:
+                    copyOfBullet.elementalDamages[i] /= 4
+
+                # Give the new projectile some delay.
+                copyOfBullet.delay = greater(0, copyOfBullet.delay) + 63
+                copyOfBullet.delayedAnimation = ['invisiblePixels.png']
+                copyOfBullet.delayedSprite = 'invisiblePixels.png'
+
+                # Add the new bullet to self.bullets.
+                self.bullets.append(copyOfBullet)
+
+        # Move if needed. Save whether the played dashed or sprinted
+        moved = self.move()
+
+        # If the player just dashed and has recently healed with the lumiswood leggings, then make self leave
+        # behind lumis. The lumis can be exploded.
+        if self.timeSinceDashing <= 80 and self.buffDurationFromLumiswoodLeggings >= 0 and \
+                self.lumisCooldownFromLumiswoodLeggings <= 0:
+            explosionAnimation = [f'explosion{i}.png' for i in range(1, 8) for j in range(35)]
+            self.bullets.append(bullet(0, 0, 0, 'desertCaveMothProjectile1.png', self.x, self.y,
+                                       animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] \
+                                                  for j in range(80)], linger=756, elementalDamages={'lumis': 0.1},
+                                       bulletCollisionEffect=('\'fire\' in other.elementalDamages.keys()',
+                                                              'bullet.elementalDamages={\'fire\': 2}; '
+                                                              'bullet.sprite = \'explosion1.png\'; '
+                                                              'bullet.rotation = 0; '
+                                                              'bullet.bulletCollisionEffect = (\'False\', \'pass\'); '
+                                                              'bullet.damageSpacing = float(\'inf\');'
+                                                              f"bullet.animation = {explosionAnimation};"
+                                                              f'bullet.linger = 240; bullet.foeContactEffect = "pass";'
+                                                              f'bullet.damagingTrapCollisionEffect='
+                                                              f'(\'False\', \'pass\')'),
+                                       foeContactEffect='if "fire" in foe.elementalDamages.keys(): '
+                                                        'projectile.elementalDamages={\'fire\': 2}; '
+                                                        'projectile.sprite = \'explosion1.png\'; '
+                                                        'projectile.rotation = 0; '
+                                                        'projectile.bulletCollisionEffect = (\'False\', \'pass\'); '
+                                                        'projectile.damageSpacing = float(\'inf\');'
+                                                        f"projectile.animation = {explosionAnimation};"
+                                                        f'projectile.linger = 240; '
+                                                        f'projectile.foeContactEffect = "pass";'
+                                                        f'projectile.damagingTrapCollisionEffect=(\'False\', \'pass\')',
+                                       damagingTrapCollisionEffect=('\'fire\' in other.elementalDamages.keys()',
+                                                                    'bullet.elementalDamages={\'fire\': 2}; '
+                                                                    'bullet.sprite = \'explosion1.png\'; '
+                                                                    'bullet.rotation = 0; '
+                                                                    'bullet.bulletCollisionEffect = (\'False\', '
+                                                                    '\'pass\'); '
+                                                                    'bullet.damageSpacing = float(\'inf\');'
+                                                                    f"bullet.animation = {explosionAnimation};"
+                                                                    f'bullet.linger = 240; bullet.foeContactEffect = '
+                                                                    f'"pass";'
+                                                                    f'bullet.damagingTrapCollisionEffect=(\'False\', '
+                                                                    f'\'pass\')'),
+                                       collisionCheckSpacing=2, collisionCheckRemainder=random.randint(0, 1),
+                                       piercing=float('inf'), damageSpacing=320))
+            self.lumisCooldownFromLumiswoodLeggings = 5
+
+        # Alert the scary if the player attacked.
+        if attacked:
             for foe in [foe for foe in self.proRoom().foes if foe.type == 'scary' and not foe.aggressive]:
                 foe.aggressive = True
 
-            return 1
-
-        elif self.move():
-            return 1
+        # Return 1 if the player attacked, dashed, or sprinted and 0 otherwise.
+        # Returning 1 makes enemies notice the player.
+        return 1 if moved or attacked else 0
 
     def proRoom(self):
         return rooms.rooms[tuple(self.room)]
