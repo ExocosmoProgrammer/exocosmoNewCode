@@ -117,6 +117,9 @@ class room:
                         self.calmSong = 'desertCaveCalm.mp3'
                         self.combatSong = 'desertCaveCombatLayer1.mp3'
 
+                # TODO Remove this line.
+                self.calmSong = self.combatSong = 'Unknown3V6.mp3'
+
             case 'ship':
                 self.yBoundaries = 84 * height / 900
                 self.difficulty = 0
@@ -152,22 +155,26 @@ class room:
                 self.damagingTraps = []
                 self.addsResources = False
                 self.calmSong = self.combatSong = 'lumisForest.mp3'
+                # TODO Remove this line.
+                self.calmSong = self.combatSong = 'Unknown3V6.mp3'
 
                 # Add trees.
                 for i in range(70):
                     try:
                         # Get a random tree sprite.
-                        treeSprite = random.choice([f'desertCaveLumisTree{i}' for i in ['', 'B', 'C', 'D', 'E', 'F',
-                                                                                            'G', 'H']])
+                        treeSprite = random.choice([f'desertCaveLumisTree{i}' for i in \
+                                                    ['', 'B', 'C', 'D', 'E', 'F', 'G', 'H']])
 
                         # Choose a place where the tree can fit.
                         pyRect = IMAGES[f'{treeSprite}.png'].get_rect()
 
-                        rectangle = environmentObject(treeSprite, 0, 0).hitbox
+                        # I add 'indestructible' to make forest trees indestructible.
+                        rectangle = environmentObject(treeSprite + 'Indestructible', 0, 0).hitbox
                         coord = self.getLocationInCell(pyRect, hitbox=rectangle)
 
                         # Add the tree.
-                        self.environmentObjects.append(environmentObject(treeSprite, coord[0], coord[1]))
+                        self.environmentObjects.append(environmentObject(treeSprite + 'Indestructible', coord[0],
+                                                                         coord[1]))
 
                     except (IndexError, KeyError):
                         pass
@@ -197,6 +204,8 @@ class room:
                 self.maxResources = 0
                 self.standardRoomMaxDifficulty = 0
                 self.foesUponRespawn = []
+                # TODO Remove this line.
+                self.calmSong = self.combatSong = 'Unknown3V6.mp3'
 
                 match self.coordinate[2]:
                     case -1:
@@ -213,6 +222,9 @@ class room:
                         self.disconnected = True
                         self.calmSong = self.combatSong = 'desertCaveLumisLakeAboveWater.mp3'
 
+                # TODO Remove this line.
+                self.calmSong = self.combatSong = 'Unknown3V6.mp3'
+
             case 'desertCaveFlowerBiome':
                 self.standardRoomMaxDifficulty = 10
                 self.foeDifficulties = {'desertCaveLargeFly': (5, 50), 'desertCaveSmallFly': (1, 100)}
@@ -222,6 +234,8 @@ class room:
                 self.addsResources = True
                 self.calmSong = self.combatSong = 'desertCaveCalm.mp3'
                 self.locks = self.usuallyLocks = False
+                # TODO Remove this line.
+                self.calmSong = self.combatSong = 'Unknown3V6.mp3'
 
                 # Add flowers.
                 for i in range(random.choice([0, 0, 1, 1, 2])):
