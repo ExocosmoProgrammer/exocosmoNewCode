@@ -42,60 +42,149 @@ class environmentObject:
     
             case 'desertCaveLumisTree':
                 self.sprite = 'desertCaveLumisTree.png'
+                self.hp = 200
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
+                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width / 3,
+                                               self.place.top + self.place.height * 4 / 5, self.place.width / 3,
+                                               self.place.height / 5))
+                self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
+                                         item('lumiswood', 'desertCaveLittleFlower.png',
+                                              qty=random.randint(5, 10)))
+
+            case 'desertCaveLumisTreeB':
+                self.sprite = 'desertCaveLumisTreeB.png'
+                self.hp = 200
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
+                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 57 / 150,
+                                               self.place.top + self.place.height * 147 / 190,
+                                               self.place.width * 22 / 75, self.place.height * 43 / 190))
+                self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
+                                         item('lumiswood', 'desertCaveLittleFlower.png',
+                                              qty=random.randint(5, 10)))
+    
+            case 'desertCaveLumisTreeC':
+                self.sprite = 'desertCaveLumisTreeC.png'
+                self.hp = 200
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
+                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 20 / 73,
+                                               self.place.top + self.place.height * 67 / 79,
+                                               self.place.width * 41 / 146, self.place.height * 12 / 79))
+                self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
+                                         item('lumiswood', 'desertCaveLittleFlower.png',
+                                              qty=random.randint(5, 10)))
+    
+            case 'desertCaveLumisTreeD':
+                self.sprite = 'desertCaveLumisTreeD.png'
+                self.hp = 200
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
+                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 47 / 133,
+                                               self.place.top + self.place.height * 9 / 11,
+                                               self.place.width * 41 / 133, self.place.height * 2 / 11))
+                self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
+                                         item('lumiswood', 'desertCaveLittleFlower.png',
+                                              qty=random.randint(5, 10)))
+    
+            case 'desertCaveLumisTreeE':
+                self.sprite = 'desertCaveLumisTreeE.png'
+                self.hp = 200
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
+                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 15 / 43,
+                                               self.place.top + self.place.height * 109 / 132,
+                                               self.place.width * 16 / 43, self.place.height * 23 / 132))
+                self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
+                                         item('lumiswood', 'desertCaveLittleFlower.png',
+                                              qty=random.randint(5, 10)))
+    
+            case 'desertCaveLumisTreeF':
+                self.sprite = 'desertCaveLumisTreeF.png'
+                self.hp = 200
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
+                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 15 / 43,
+                                               self.place.top + self.place.height * 109 / 132,
+                                               self.place.width * 16 / 43, self.place.height * 23 / 132))
+                self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
+                                         item('lumiswood', 'desertCaveLittleFlower.png',
+                                              qty=random.randint(5, 10)))
+    
+            case 'desertCaveLumisTreeG':
+                self.sprite = 'desertCaveLumisTreeG.png'
+                self.hp = 200
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
+                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 25 / 62,
+                                               self.place.top + self.place.height * 82 / 101,
+                                               self.place.width * 17 / 62, self.place.height * 19 / 101))
+                self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
+                                         item('lumiswood', 'desertCaveLittleFlower.png',
+                                              qty=random.randint(5, 10)))
+    
+            case 'desertCaveLumisTreeH':
+                self.sprite = 'desertCaveLumisTreeH.png'
+                self.hp = 200
+                self.place = IMAGES[self.sprite].get_rect(center=(x, y))
+                self.hitbox = rect(pygame.Rect(self.place.left, self.place.height * 31 / 66 + self.place.top,
+                                               self.place.width, self.place.height * 35 / 66))
+                self.drops = droppedItem(x, y, 'desertCaveLittleFlower.png',
+                                         item('lumiswood', 'desertCaveLittleFlower.png',
+                                              qty=random.randint(5, 10)))
+
+            # Indestructible trees will be present in the desert cave forests.
+            case 'desertCaveLumisTreeIndestructible':
+                self.sprite = 'desertCaveLumisTree.png'
                 self.hp = float('inf')
                 self.place = IMAGES[self.sprite].get_rect(center=(x, y))
                 self.hitbox = rect(pygame.Rect(self.place.left + self.place.width / 3,
                                                self.place.top + self.place.height * 4 / 5, self.place.width / 3,
                                                self.place.height / 5))
-    
-            case 'desertCaveLumisTreeB':
+
+            case 'desertCaveLumisTreeBIndestructible':
                 self.sprite = 'desertCaveLumisTreeB.png'
                 self.hp = float('inf')
                 self.place = IMAGES[self.sprite].get_rect(center=(x, y))
                 self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 57 / 150,
                                                self.place.top + self.place.height * 147 / 190,
                                                self.place.width * 22 / 75, self.place.height * 43 / 190))
-    
-            case 'desertCaveLumisTreeC':
+
+            case 'desertCaveLumisTreeCIndestructible':
                 self.sprite = 'desertCaveLumisTreeC.png'
                 self.hp = float('inf')
                 self.place = IMAGES[self.sprite].get_rect(center=(x, y))
                 self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 20 / 73,
                                                self.place.top + self.place.height * 67 / 79,
                                                self.place.width * 41 / 146, self.place.height * 12 / 79))
-    
-            case 'desertCaveLumisTreeD':
+
+            case 'desertCaveLumisTreeDIndestructible':
                 self.sprite = 'desertCaveLumisTreeD.png'
                 self.hp = float('inf')
                 self.place = IMAGES[self.sprite].get_rect(center=(x, y))
                 self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 47 / 133,
                                                self.place.top + self.place.height * 9 / 11,
                                                self.place.width * 41 / 133, self.place.height * 2 / 11))
-    
-            case 'desertCaveLumisTreeE':
+
+            case 'desertCaveLumisTreeEIndestructible':
                 self.sprite = 'desertCaveLumisTreeE.png'
                 self.hp = float('inf')
                 self.place = IMAGES[self.sprite].get_rect(center=(x, y))
                 self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 15 / 43,
                                                self.place.top + self.place.height * 109 / 132,
                                                self.place.width * 16 / 43, self.place.height * 23 / 132))
-    
-            case 'desertCaveLumisTreeF':
+
+            case 'desertCaveLumisTreeFIndestructible':
                 self.sprite = 'desertCaveLumisTreeF.png'
                 self.hp = float('inf')
                 self.place = IMAGES[self.sprite].get_rect(center=(x, y))
-                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 15 / 43, self.place.top + self.place.height * 109 / 132,
+                self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 15 / 43,
+                                               self.place.top + self.place.height * 109 / 132,
                                                self.place.width * 16 / 43, self.place.height * 23 / 132))
-    
-            case 'desertCaveLumisTreeG':
+
+            case 'desertCaveLumisTreeGIndestructible':
                 self.sprite = 'desertCaveLumisTreeG.png'
                 self.hp = float('inf')
                 self.place = IMAGES[self.sprite].get_rect(center=(x, y))
                 self.hitbox = rect(pygame.Rect(self.place.left + self.place.width * 25 / 62,
                                                self.place.top + self.place.height * 82 / 101,
                                                self.place.width * 17 / 62, self.place.height * 19 / 101))
-    
-            case 'desertCaveLumisTreeH':
+
+            case 'desertCaveLumisTreeHIndestructible':
                 self.sprite = 'desertCaveLumisTreeH.png'
                 self.hp = float('inf')
                 self.place = IMAGES[self.sprite].get_rect(center=(x, y))
