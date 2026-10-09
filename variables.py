@@ -96,9 +96,22 @@ plainSpritesPerBiome = {('desert', -1): ['desertCaveLumisFern.png',
                         ('desertCaveForest', -1): ['desertCaveLumisFern.png']}
 notRespawningEnvironmentObjectsPerBiome = {('desert', -1): ['desertCaveLumisTree'],
                                            ('desertCaveForest', -1): ['desertCaveLumisTree']}
+
+# TODO After uploading code to Github, make recipes an attribute of the player and give the player a deepcopy of one
+# TODO of the values upon crafting. I shouldn't use exec and eval too much.
 recipes = {tuple(sorted(['moth dust'] * 5 + ['lumis'] * 50)):
                ('item("lumisFlamethrower", "basicSpreadInInventory.png", "The lumis flamethrower fires projectiles.", '
-                'stackSize=1)')}
+                'stackSize=1)'),
+           tuple(sorted(['lumiswood'] * 10 + ['lumis'] * 5 + ['moth dust'] * 3)):
+                'item("Lumiswood Pendant", "boneInInventory.png", "Healing gives you temporary bonuses but less hp.", '
+                'stackSize=1)',
+           tuple(sorted(['lumiswood'] * 10 + ['lumis'] * 20 + ['large fly skull'])):
+                'item("Lumiswood Helmet", "boneInInventory.png", "Is a helmet.")',
+           tuple(sorted(['lumiswood'] * 25 + ['lumis'] * 40)):
+                'item("Lumiswood Chestplate", "boneInInventory.png", "Is a chestplate.")',
+           tuple(sorted(['lumiswood'] * 25 + ['lumis'] * 30 + ['moth dust'] * 10)):
+                'item("Lumiswood Leggings", "boneInInventory.png", "Is Leggings.")'
+           }
 playerHeight = height * 4 / 45
 environmentObjectLayoutsPerBiome = {('desertCaveLumisLake', -1): ['[environmentObject("lumisLakeRock1", '
                                                                   'width * i / 4, height * j / 4) for i in [1, 3] '
