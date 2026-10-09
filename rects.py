@@ -1,3 +1,5 @@
+import copy
+
 from definitions import rotate, lesser, greater, checkLineCollision
 from lines import line
 from variables import display
@@ -189,3 +191,12 @@ class rect:
                         return 1
 
         return 0
+
+    def copy(self):
+        """Returns a copy of self."""
+
+        result = rect(pygame.Rect(0, 0, 1, 1))
+        result.points = copy.deepcopy(self.points)
+        result.getMajorInfo()
+        result.getLines()
+        return result
