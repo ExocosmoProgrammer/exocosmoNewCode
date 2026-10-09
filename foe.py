@@ -87,7 +87,7 @@ class foe:
                    'desertCaveJellyfish': self.actAsDesertCaveJellyfish,
                    'desertCaveSmallFly': self.actAsDesertCaveSmallFly,
                    'desertCaveLargeFly': self.actAsDesertCaveLargeFly, 'desertCaveSpider': self.actAsDesertCaveSpider,
-                   'desertCaveMoth': self.actAsDesertCaveMoth, 'desertCaveFlyMiniboss': self.actAsDesertCaveFlyMiniboss,
+                   'desertCaveMoth': self.desertCaveMothExperiment, 'desertCaveFlyMiniboss': self.actAsDesertCaveFlyMiniboss,
                    'scary': self.actAsScary, 'container': self.actAsContainer,
                    'lumisBlobFromContainer': self.actAsLumisBlobFromContainer,
                    'gauntletMiniboss': self.actAsGauntletMiniboss, 'gauntletKamikaze': self.actAsGauntletKamikaze,
@@ -253,7 +253,9 @@ class foe:
                 self.deathAnimation = [f'desertCaveLargeFlyDeathFrame{i}.png' for i in [1, 2] for j in range(150)]
                 self.loot = [[droppedItem(self.x, self.y, 'lumisInInventory.png',
                                           item('lumis', 'lumisInInventory.png',
-                                               qty=random.randint(1, 2))), 100]]
+                                               qty=random.randint(1, 2))), 100],
+                             [droppedItem(self.x, self.y, 'boneInInventory.png',
+                                          item('large fly skull', 'boneInInventory.png')), 4]]
                 self.hasFullHitbox = False
                 widthOfInitialSprite = IMAGES[self.sprite].get_width()
                 heightOfFrameTwo = IMAGES[self.animation[45]].get_height()
@@ -289,7 +291,7 @@ class foe:
                 self.aggressionRadius = float('inf')
                 self.loot = [[droppedItem(self.x, self.y, 'lumisInInventory.png',
                                           item('lumis', 'lumisInInventory.png',
-                                               qty=random.randint(5, 10))), 100]]
+                                               qty=random.randint(7, 10))), 100]]
                 self.elementalResistances = {'fire': -0.3, 'lumis': 0.5}
     
             case 'desertCaveMoth':
@@ -304,7 +306,10 @@ class foe:
                 self.deltaTSign = -1
                 self.loot = [[droppedItem(self.x, self.y, 'desertCaveMothProjectile1.png',
                                           item('moth dust', 'desertCaveMothProjectile1.png',
-                                               qty=random.randint(5, 10))), 100]]
+                                               qty=random.randint(1, 2))), 100],
+                             [droppedItem(self.x, self.y, 'lumisInInventory.png',
+                                          item('lumis', 'lumisInInventory.png',
+                                               qty=random.randint(2, 3))), 100]]
 
                 # self.hitbox should remain centered on self and at a constant size.
                 self.hitboxOnSelf = rect(IMAGES[self.animation[15]].get_rect(center=(0, 0)))
@@ -553,6 +558,10 @@ class foe:
             exec(f'self.{stat} = extra[stat]')
 
         self.initialHp = self.hp
+
+        # TODO Remove this line.
+        if self.specialSong is not None:
+            self.specialSong = 'Unknown3V6.mp3'
 
     def progressAnimation(self, *args):
         """Update self's sprite."""
@@ -866,15 +875,15 @@ class foe:
         self.fireCooldown -= GAMESPEED
 
         # Reduce self.momentum, effectively slowing self down.
-        self.momentum -= 0.005 * GAMESPEED
+        self.momentum -= 0.0133 * GAMESPEED
 
         # Progress self's animation.
         self.progressAnimation()
 
         # Make self move at an angle of self.angle.
         # The speed at which self moves should be proportional to self.momentum.
-        self.hr = math.cos(self.angle) * self.momentum * 3
-        self.vr = math.sin(self.angle) * self.momentum * 3
+        self.hr = math.cos(self.angle) * self.momentum * 2
+        self.vr = math.sin(self.angle) * self.momentum * 2
 
         # Make self move. If self hits a wall, set self.fireCooldown to 0.
         if self.moveNormally():
@@ -883,8 +892,8 @@ class foe:
         # If self.fireCooldown <= 0, make self start dashing to the player, and set self.fireCooldown.
         if self.fireCooldown <= 0:
             self.angle = getRadians(target.x - self.x, self.y - target.y)
-            self.momentum = 1
-            self.fireCooldown = 200
+            self.momentum = 2
+            self.fireCooldown = 150
 
     def actAsDesertCaveLargeFly(self, target, *args):
         """This function should be used by desert cave large flies on each turn of theirs."""
@@ -896,23 +905,23 @@ class foe:
         # If self.fireCooldown <= 0, enact the proper procedure.
         if self.fireCooldown <= 0:
             # Set self.fireCooldown.
-            self.fireCooldown = 500
+            self.fireCooldown = 400
 
             # Self can have one assistant right above self, one right to the left, and one right to the right.
             # If there is space for an assistant, create one where there is space.
             if self.summonsAsDesertCaveLargeFly['top'] is None or self.summonsAsDesertCaveLargeFly['top'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room,
-                                        unusualTargets=self.unusualTargets, vr=-0.3))
+                                        unusualTargets=self.unusualTargets, vr=-0.4))
                 self.summonsAsDesertCaveLargeFly['top'] = self.newFoes[-1]
 
             elif self.summonsAsDesertCaveLargeFly['left'] is None or self.summonsAsDesertCaveLargeFly['left'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room,
-                                        unusualTargets=self.unusualTargets, hr=-0.3))
+                                        unusualTargets=self.unusualTargets, hr=-0.4))
                 self.summonsAsDesertCaveLargeFly['left'] = self.newFoes[-1]
 
             elif self.summonsAsDesertCaveLargeFly['right'] is None or self.summonsAsDesertCaveLargeFly['right'].hp <= 0:
                 self.newFoes.append(foe('desertCaveSmallFly', self.x, self.y, self.room,
-                                        unusualTargets=self.unusualTargets, hr=0.3))
+                                        unusualTargets=self.unusualTargets, hr=0.4))
                 self.summonsAsDesertCaveLargeFly['right'] = self.newFoes[-1]
 
             self.summons = [value for value in self.summonsAsDesertCaveLargeFly.values() if value is not None and \
@@ -930,14 +939,14 @@ class foe:
 
         # If self.currentDuration is low enough, move. self.hr and self.vr should have been given as keyword arguments
         # when self was created.
-        if self.currentDuration < 200:
+        if self.currentDuration < 150:
             self.moveWithoutWallCollision()
 
         # If self.fireCooldown <= 0, fire towards the target and set self.fireCooldown.
         if self.fireCooldown <= 0:
-            self.basicStraightShot(4, 'smallFlyProjectile.png', 10,
-                                   target, unusualTargets=[self.unusualTarget], elementalDamages={'lumis': 20})
-            self.fireCooldown = 200
+            self.basicStraightShot(5, 'smallFlyProjectile.png', 20,
+                                   target, unusualTargets=[self.unusualTarget], elementalDamages={'lumis': 40})
+            self.fireCooldown = random.randint(150, 175)
 
     def setMovementInSemicircleTowardsTarget(self, target, radius):
         """self.setMovementInSemicircleTowardsTarget(x, y) sets self.deltaTSign and sets self.movementCode so that
@@ -958,6 +967,7 @@ class foe:
     def actAsDesertCaveMoth(self, target, room, *args):
         """This function should be used by desert cave moths on each turn of theirs."""
 
+        # TODO After uploading code to Github, delete this function and give its name to desertCaveMothExperiment.
         # Reduce cooldowns.
         self.fireCooldown -= GAMESPEED
         self.altFireCooldown -= GAMESPEED
@@ -969,7 +979,7 @@ class foe:
         exec(self.movementCode)
 
         # Update self.t. self.t will be used to calculate self.x and self.y.
-        self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
+        self.t += math.pi / 450 * self.deltaTSign * GAMESPEED
 
         # Make self turn around if it hits an object.
         for thing in room.environmentObjects:
@@ -978,7 +988,7 @@ class foe:
                 self.setMovementInSemicircleTowardsTarget(target, width / 20)
 
                 while thing.hitbox.checkCollision(self.hitbox):
-                    self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
+                    self.t += math.pi / 450 * self.deltaTSign * GAMESPEED
                     exec(self.movementCode)
                     self.hitbox = copy.deepcopy(self.hitboxOnSelf)
                     self.hitbox.move(self.x, self.y)
@@ -988,8 +998,8 @@ class foe:
             self.basicClusterShot(3, 30, target, 4, 'desertCaveMothProjectile1.png',
                                  5, unusualTargets=[self.unusualTarget],
                                  animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] for j in range(15)],
-                                  elementalDamages={'lumis': 45})
-            self.fireCooldown = random.randint(30, 600)
+                                  elementalDamages={'lumis': 75})
+            self.fireCooldown = random.randint(60, 400)
 
         # If self.altFireCooldown <= 0, enact the proper procedure.
         elif self.altFireCooldown <= 0:
@@ -997,52 +1007,57 @@ class foe:
             self.setMovementInSemicircleTowardsTarget(target, width / 20)
 
             # Set self.altFireCooldown.
-            self.altFireCooldown = 600
+            self.altFireCooldown = 450
 
     def desertCaveMothExperiment(self, target, room):
         """Please, figure out what this function is and why it is here."""
-
-        # TODO Please, figure out what this function is and why it is here.
 
         # Reduce cooldowns.
         self.fireCooldown -= GAMESPEED
         self.altFireCooldown -= GAMESPEED
 
-        # Progress self.animation.
+        # Progress self's animation.
         self.progressAnimation()
 
-        # Once self should move, move self.
-        exec(self.movementCode)
-
         # Update self.t. self.t will be used to calculate self.x and self.y.
-        self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
+        self.t += math.pi / 450 * self.deltaTSign * GAMESPEED
+        self.x -= width * math.pi / 4500 * self.deltaTSign * GAMESPEED * math.sin(self.t)
+        self.y += width * math.pi / 4500 * self.deltaTSign * GAMESPEED * math.cos(self.t)
 
         # Make self turn around if it hits an object.
         for thing in room.environmentObjects:
             if thing.hitbox.checkCollision(self.hitbox):
                 self.deltaTSign *= -1
-                self.setMovementInSemicircleTowardsTarget(target, width / 20)
+                self.t += math.pi / 450 * self.deltaTSign * GAMESPEED
+                self.x -= width * math.pi / 4500 * self.deltaTSign * GAMESPEED * math.sin(self.t)
+                self.y += width * math.pi / 4500 * self.deltaTSign * GAMESPEED * math.cos(self.t)
 
                 while thing.hitbox.checkCollision(self.hitbox):
-                    self.t += math.pi / 600 * self.deltaTSign * GAMESPEED
-                    exec(self.movementCode)
-                    self.hitbox = copy.deepcopy(self.hitboxOnSelf)
+                    self.t += math.pi / 450 * self.deltaTSign * GAMESPEED
+                    self.x -= width * math.pi / 4500 * self.deltaTSign * GAMESPEED * math.sin(self.t)
+                    self.y += width * math.pi / 4500 * self.deltaTSign * GAMESPEED * math.cos(self.t)
+                    self.hitbox = self.hitboxOnSelf.copy()
                     self.hitbox.move(self.x, self.y)
 
         # If self.fireCooldown <= 0, fire a cluster of projectiles and set self.fireCooldown.
         if self.fireCooldown <= 0:
-            self.basicClusterShot(3, 30, target, 4, 'desertCaveMothProjectile1.png',
-                                  50, unusualTargets=[self.unusualTarget],
-                                  animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] for j in range(15)])
-            self.fireCooldown = random.randint(30, 600)
+            self.basicClusterShot(3, 30, target, 3, 'desertCaveMothProjectile1.png',
+                                  10, unusualTargets=[self.unusualTarget],
+                                  animation=[f'desertCaveMothProjectile{i}.png' for i in [1, 2] for j in range(15)],
+                                  elementalDamages={'lumis': 45})
+            self.fireCooldown = random.randint(150, 250)
 
-        # If self.altFireCooldown <= 0, enact the proper procedure.
+        # If self.altFireCooldown <= 0, do things.
         elif self.altFireCooldown <= 0:
-            # Set self.movement code so that self will move in a semicircular motion.
-            self.setMovementInSemicircleTowardsTarget(target, width / 20)
+            diameter = width / 10
+            path = getPath(diameter, (self.x, self.y), (target.x, target.y))
+            destinationPoint = (self.x + path[0], self.y + path[1])
+            self.t = -getRadians((self.x - destinationPoint[0]), (self.y - destinationPoint[1]))
+            self.deltaTSign = 1 if (self.y > height / 2 and self.x < target.x) or \
+                                   (self.y < height / 2 and self.x > target.x) else -1
 
             # Set self.altFireCooldown.
-            self.altFireCooldown = 600
+            self.altFireCooldown = 450
 
     def actAsDesertCaveSummoner(self, target, *args):
         """This function should be used by desert cave summoners on each turn of theirs."""
@@ -1520,8 +1535,8 @@ class foe:
                                                            "watchdogFireballFragment.png",
                                                            hitboxForFragments= \
                                                                copy.deepcopy(self.hitboxForFireballFragments),
-                                                           hitboxOnProjectile=copy.deepcopy(self.hitboxForBigFireballs),
                                                            elementalDamages={'fire': 40})
+                        self.newBullets[-1].hitbox = copy.deepcopy(self.hitboxForBigFireballs)
 
                         # Set self.fireCooldown and self.altFireCooldown.
                         self.fireCooldown = 241
@@ -2373,6 +2388,7 @@ class foe:
     def giveProjectileHoming(self, projectile, minimumDistanceForHoming=float('inf')):
         """Makes a projectile move straight to the player if it gets close enough to the projectile."""
 
+        # TODO Add this effect to all existing conditional effects instead of replacing them.
         projectile.conditionalEffects = {'pointDistance((projectile.x, projectile.y), '
                                                              f'(pro.x, pro.y)) < {minimumDistanceForHoming}':
                                                                  "(projectile.hr, projectile.vr) = "
@@ -2762,7 +2778,6 @@ class foe:
                 self.newBullets.append(bullet(0, 0, damage, sprite,
                                               i.x, i.y, linger=linger, piercing=float('inf'),
                                               delayedSprite='invisiblePixels.png', delay=j / speed))
-                print(vars(self.newBullets[-1]))
                 i.move()
 
             self.newBullets.remove(i)
