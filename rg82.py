@@ -1,6 +1,12 @@
+import time
+
+print('\033[91m\033[1mTO END THE GAME, PLEASE DO NOT CLICK THE STOP BUTTON TWICE. '
+      'THIS SEEMS TO BE THE CAUSE OF CORRUPTED SAVE FILES.')
+time.sleep(1)
+input('PRESS ENTER TO CONTINUE: ')
+
 import math
 import sys
-import time
 import datetime
 import pygame
 import copy
@@ -37,8 +43,8 @@ introductoryIntermission = intermissionScreen('Your ship has crashed. You look a
                                               'you.', 'shipBackgroundWithDoor.bmp', 'intermission1.mp3')
 shipClearedIntermission = intermissionScreen('You destroyed your ship\'s malfunctioning robots that attacked you. '
                                              'The fires in your ship have gone out. Your ship, unfortunately, no '
-                                             'longer functions as a ship.', 'shipBackgroundWithDoor.bmp',
-                                             'intermission1.mp3')
+                                             'longer functions as an adequate means of transportation.',
+                                             'shipBackgroundWithDoor.bmp','intermission1.mp3')
 
 # Do other stuff.
 
@@ -46,6 +52,10 @@ shipClearedIntermission = intermissionScreen('You destroyed your ship\'s malfunc
 def play(song, saveSong=True, volume=0.15):
     """Play song."""
     global positionInSong
+
+    # TODO Remove this line.
+    if song == 'Unknown3V6.mp3':
+        volume *= 4
 
     pygame.mixer.music.set_volume(volume)
 
@@ -62,7 +72,7 @@ def play(song, saveSong=True, volume=0.15):
 enemyBullets = []
 positionInSong = 0
 pro = player()
-play('valseHommageMp3.mp3')
+play('UnknownV1.mp3')
 startButton = button('whiteStartButton.png', width * 41 / 50, height * 7 / 12,
                      spriteWhenTouchingMouse='redStartButton.png')
 exitButton = button('whiteExitButton.png', width * 41 / 50, height * 17 / 24,
@@ -184,7 +194,8 @@ def drawGame():
         drawToFullScreen(currentRoom.background, offset=displayVars.screenOffset)
 
         for door in currentRoom.doors:
-            draw(door, offset=displayVars.screenOffset)
+            pass
+            #draw(door, offset=displayVars.screenOffset)
 
         for sprite in currentRoom.plainSprites:
             draw(sprite, offset=displayVars.screenOffset)
@@ -363,6 +374,14 @@ def moveBullets():
 
         else:
             projectile.delay -= GAMESPEED
+
+            if projectile.followsProWhenDelayed:
+                projectile.x = pro.x
+                projectile.y = pro.y
+                projectile.place.move_ip(projectile.x - projectile.place.x, projectile.y - projectile.place.y)
+                projectile.hitbox.move(projectile.x - projectile.hitbox.centerx,
+                                       projectile.y - projectile.hitbox.centery)
+                projectile.hitbox.updatePoints()
 
     for projectile in enemyBullets + [i for i in pro.proRoom().enemyBullets if i.linger > 0]:
         if projectile.delay <= 0:
@@ -677,7 +696,6 @@ def roomClearingProcedure():
         except IndexError:
             play(proRoom().calmSong)
             pro.hp = lesser(130, pro.hp + 40)
-            pro.updateHpRect()
             currentRoom.foes = []
 
             match currentRoom.coordinate:
@@ -858,7 +876,6 @@ def runGame():
 
     if event:
         # TODO make this block's work be done in pro.py.
-
         for enemy in proRoom().foes:
             if enemy not in pro.aggressiveFoes:
                 pro.aggressiveFoes.append(enemy)
@@ -919,8 +936,8 @@ def respawn():
     pro.room = pro.startingRoom.copy()
     pro.x = pro.startingCoord[0]
     pro.y = pro.startingCoord[1]
-    pro.hp = pro.maxHp + 1
-    pro.hurt(1)
+    pro.hp = pro.maxHp
+    pro.temporaryHpBonuses = []
     pro.potions = pro.maxPotions
     pro.aggressiveFoes = []
     enemyBullets = []
@@ -931,7 +948,7 @@ def respawn():
 
     play('Crashed.mp3')
 
-
+pro.destroyFoes()
 while True:
     while pro.hp > -float('0'):
         try:
